@@ -9,13 +9,15 @@ type BeforeInstallPromptEvent = Event & {
 
 export default function PWAInstall() {
   const isProd = process.env.NODE_ENV === 'production';
+  const enableSwInDev = process.env.NEXT_PUBLIC_ENABLE_SW_DEV === '1';
+  const allowSw = isProd || enableSwInDev;
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
-    // Avoid registering service workers or prompting installs during local dev; it breaks HMR and clutters the console.
-    if (!isProd) {
+    // Avoid registering service workers during local dev unless explicitly enabled; it can interfere with HMR.
+    if (!allowSw) {
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then((regs) => {
           regs.forEach((reg) => reg.unregister());
@@ -59,7 +61,7 @@ export default function PWAInstall() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, [isProd]);
+  }, [allowSw]);
 
   const handleInstall = async () => {
     if (!installPrompt) return;
@@ -76,7 +78,7 @@ export default function PWAInstall() {
   };
 
   // Don't render anything if app is installed or prompt shouldn't be shown
-  if (!isProd || isInstalled || !showPrompt) {
+  if (!allowSw || isInstalled || !showPrompt) {
     return null;
   }
 

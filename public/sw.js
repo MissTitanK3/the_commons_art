@@ -1,10 +1,35 @@
-const VERSION = '2025-12-21';
+const VERSION = '2025-12-21.1';
 const CACHE_NAME = `commons-game-${VERSION}`;
-const STATIC_ASSETS = ['/', '/offline.html'];
+const STATIC_ASSETS = [
+  '/',
+  '/log',
+  '/log/',
+  '/needs',
+  '/needs/',
+  '/selfcare',
+  '/selfcare/',
+  '/settings',
+  '/settings/',
+  '/offline.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/maskable-icon-192.png',
+  '/maskable-icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.addAll(STATIC_ASSETS);
+
+      // Alias favicon to an existing icon so offline browsers don't error on /favicon.ico.
+      const icon = await cache.match('/icon-192.png');
+      if (icon) {
+        await cache.put('/favicon.ico', icon.clone());
+      }
+    })()
   );
   self.skipWaiting();
 });
@@ -23,32 +48,93 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Always fetch fresh HTML; fall back to offline page if unreachable.
-  if (event.request.mode === 'navigate') {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Serve favicon from cache (aliased to icon-192) to avoid network errors offline.
+  if (url.pathname === '/favicon.ico') {
     event.respondWith(
-      fetch(event.request, { cache: 'no-store' }).catch(() =>
-        caches.match('/offline.html')
-      )
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match('/favicon.ico');
+        if (cached) return cached;
+
+        try {
+          const res = await fetch('/icon-192.png');
+          if (res && res.ok) {
+            cache.put('/favicon.ico', res.clone());
+            return res;
+          }
+        } catch (err) {
+          console.log('Fetch failed for favicon; returning empty response instead.', err);
+          // Ignore fetch errors; fall through to empty response.
+        }
+
+        return new Response('', { status: 204, headers: { 'Content-Type': 'image/x-icon' } });
+      })()
     );
     return;
   }
 
-  // Cache-first for static assets.
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
+  // Offline-first for navigations: serve cached page if offline, update cache when online.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(request);
 
-      return fetch(event.request)
-        .then((response) => {
-          if (!response || response.status !== 200 || response.type === 'error') {
-            return response;
+        try {
+          const fresh = await fetch(request, { cache: 'no-store' });
+          cache.put(request, fresh.clone());
+          return fresh;
+        } catch (err) {
+          if (cached) return cached;
+          console.log('Fetch failed; returning offline page instead.', err);
+
+          // Fallback to app shell so client-side routing can handle navigation offline.
+          const shell = await cache.match('/');
+          if (shell) return shell;
+
+          return cache.match('/offline.html');
+        }
+      })()
+    );
+    return;
+  }
+
+  // Cache-first for static assets and build outputs.
+  const isStaticAsset =
+    url.origin === self.location.origin &&
+    (url.pathname.startsWith('/_next/static/') ||
+      url.pathname.startsWith('/icon-') ||
+      url.pathname.startsWith('/maskable-icon-') ||
+      STATIC_ASSETS.includes(url.pathname));
+
+  if (isStaticAsset) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(request);
+        if (cached) return cached;
+
+        try {
+          const fresh = await fetch(request);
+          if (fresh && fresh.status === 200) {
+            cache.put(request, fresh.clone());
           }
+          return fresh;
+        } catch (err) {
+          // Avoid returning HTML for JS/CSS; give an empty 503 so the failure is explicit.
+          return new Response('', { status: 503 });
+          console.log('Fetch failed for static asset; returning empty response instead.', err);
+        }
+      })()
+    );
+    return;
+  }
 
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-        .catch(() => caches.match('/offline.html'));
-    })
+  // Default: network-first with offline fallback.
+  event.respondWith(
+    fetch(request).catch(() => caches.match(request).then((res) => res || caches.match('/offline.html')))
   );
 });
