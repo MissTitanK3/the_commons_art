@@ -28,6 +28,10 @@ export function formatTimeAgoNMH(timestamp: number): string {
 }
 
 export const DAY_MS = 1000 * 60 * 60 * 24;
+// Allow up to four event triggers per day (roughly every 6 hours).
+export const EVENT_INTERVAL_MS = DAY_MS / 4;
+// Absolute guard so events never occur closer than 3 hours apart.
+export const MIN_EVENT_SPACING_MS = 1000 * 60 * 60 * 3;
 
 export const CHECKIN_INTERVAL_MS = DEV_CONFIG.enabled ? DEV_CONFIG.CHECKIN_INTERVAL_MS : 1000 * 60 * 60 * 24 * 7;
 

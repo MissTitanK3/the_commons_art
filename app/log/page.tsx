@@ -5,18 +5,13 @@ import { useMemo, useState } from 'react';
 
 import { SCALE_LABELS } from '@/config/constants';
 import { EVENTS } from '@/systems/events';
-// import { GROWTH_DECISIONS } from '@/systems/growthDecisions';
-// import { GrowthDecisionId } from '@/types/core_game_types';
 import { useCommonsStore, type CommonsState } from '@/state/store';
 import { formatTimeAgoNMH } from '@/utils/time';
 
 export default function LogPage() {
   const eventLog = useCommonsStore((s: CommonsState) => s.eventLog);
   const devLogTestEvent = useCommonsStore((s: CommonsState) => s.devLogTestEvent);
-  // const communityScale = useCommonsStore((s: CommonsState) => s.communityScale);
   const prestigeStars = useCommonsStore((s: CommonsState) => s.prestigeStars);
-  // const growthDecisionSelections = useCommonsStore((s: CommonsState) => s.growthDecisionSelections);
-  // const communityValues = useCommonsStore((s: CommonsState) => s.communityValues);
   const legacyRuns = useCommonsStore((s: CommonsState) => s.legacyRuns);
   const pinnedLegacyRunId = useCommonsStore((s: CommonsState) => s.pinnedLegacyRunId);
   const renameLegacyRun = useCommonsStore((s: CommonsState) => s.renameLegacyRun);
@@ -25,52 +20,6 @@ export default function LogPage() {
 
   const eventsById = useMemo(() => new Map(EVENTS.map((event) => [event.id, event])), []);
   const isDev = process.env.NODE_ENV === 'development';
-
-  // const reflection = useMemo(() => {
-  //   const decisions = Object.entries(growthDecisionSelections)
-  //     .map(([id, choiceKey]) => {
-  //       const decision = GROWTH_DECISIONS.find((d) => d.id === id);
-  //       if (!decision || !choiceKey) return undefined;
-  //       const choice = decision.choices.find((c) => c.key === choiceKey);
-  //       if (!choice) return undefined;
-  //       return {
-  //         id: decision.id as GrowthDecisionId,
-  //         tier: `${decision.from} -> ${decision.to}`,
-  //         prompt: decision.prompt,
-  //         choice: choice.title,
-  //         summary: choice.effects.join('; '),
-  //       };
-  //     })
-  //     .filter((d): d is {
-  //       id: GrowthDecisionId;
-  //       tier: string;
-  //       prompt: string;
-  //       choice: string;
-  //       summary: string;
-  //     } => Boolean(d));
-
-  //   const identitySummary = (() => {
-  //     const flags = communityValues;
-  //     const themes: string[] = [];
-  //     if (flags.careFirst) themes.push('care over speed');
-  //     if (flags.informalCoordination) themes.push('informal coordination');
-  //     if (flags.participatoryGovernance) themes.push('participatory governance');
-  //     if (flags.denseLiving) themes.push('living closely to share resources');
-  //     if (flags.identityStrong) themes.push('strong local identity');
-  //     if (flags.adaptiveGovernance) themes.push('adaptive governance');
-  //     if (flags.trustFocused) themes.push('trust-first relations');
-  //     if (flags.aidAnchor) themes.push('regional mutual aid');
-  //     if (themes.length === 0) return 'This community is steady and pragmatic.';
-  //     return `This community leans toward ${themes.join(', ')}.`;
-  //   })();
-
-  //   return {
-  //     highestTier: communityScale,
-  //     prestigeStars,
-  //     decisions,
-  //     identitySummary,
-  //   };
-  // }, [communityScale, communityValues, growthDecisionSelections, prestigeStars]);
 
   const chronologicalLegacy = useMemo(
     () => [...legacyRuns].sort((a, b) => a.createdAt - b.createdAt),

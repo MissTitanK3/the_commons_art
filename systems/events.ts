@@ -1,5 +1,5 @@
 import { CommonsEvent, EventEffect } from '@/types/global_types';
-import { DAY_MS } from '@/utils/time';
+import { EVENT_INTERVAL_MS, MIN_EVENT_SPACING_MS } from '@/utils/time';
 
 export function describeEffect(effect: EventEffect): string {
   const parts: string[] = [];
@@ -36,7 +36,9 @@ export function describeEffect(effect: EventEffect): string {
 
 export function isEventEligible(lastEventAt?: number) {
   if (!lastEventAt) return true;
-  return Date.now() - lastEventAt >= DAY_MS;
+  const elapsed = Date.now() - lastEventAt;
+  const cooldown = Math.max(EVENT_INTERVAL_MS, MIN_EVENT_SPACING_MS);
+  return elapsed >= cooldown;
 }
 
 export function pickEvent() {
