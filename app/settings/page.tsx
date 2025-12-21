@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 
 import { PresetButton } from "@/components/settings/PresetButton";
@@ -11,20 +10,13 @@ import { CommonsState, useCommonsStore } from "@/state/store";
 import { THEME_PRESETS } from "@/config/constants";
 
 export default function SettingsPage() {
-  const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
   const { highContrast, setHighContrast, accentPreset, setAccentPreset } = useThemePrefs();
   const devReset = useCommonsStore((s: CommonsState) => s.devReset);
 
   const isDev = process.env.NODE_ENV === "development";
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
+  const currentTheme = theme ?? "system";
 
   return (
     <main className="min-h-screen bg-background text-text overflow-x-hidden px-4">
@@ -61,48 +53,48 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <button
               onClick={() => setTheme("system")}
-              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${(theme ?? "system") === "system"
+              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${currentTheme === "system"
                 ? "bg-tint border-tint text-foreground font-bold shadow-sm ring-1 ring-tint/70"
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {(theme ?? "system") === "system" && "✓ "}System
+              {currentTheme === "system" && "✓ "}System
             </button>
             <button
               onClick={() => setTheme("light")}
-              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${(theme ?? "system") === "light"
+              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${currentTheme === "light"
                 ? "bg-tint border-tint text-foreground font-bold shadow-sm ring-1 ring-tint/70"
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {(theme ?? "system") === "light" && "✓ "}Light
+              {currentTheme === "light" && "✓ "}Light
             </button>
             <button
               onClick={() => setTheme("dark")}
-              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${(theme ?? "system") === "dark"
+              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${currentTheme === "dark"
                 ? "bg-tint border-tint text-foreground font-bold shadow-sm ring-1 ring-tint/70"
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {(theme ?? "system") === "dark" && "✓ "}Dark
+              {currentTheme === "dark" && "✓ "}Dark
             </button>
             <button
               onClick={() => setTheme("lofi")}
-              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${(theme ?? "system") === "lofi"
+              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${currentTheme === "lofi"
                 ? "bg-tint border-tint text-foreground font-bold shadow-sm ring-1 ring-tint/70"
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {(theme ?? "system") === "lofi" && "✓ "}Lofi
+              {currentTheme === "lofi" && "✓ "}Lofi
             </button>
             <button
               onClick={() => setTheme("dim")}
-              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${(theme ?? "system") === "dim"
+              className={`w-full py-2 px-3 rounded-lg border transition-opacity ${currentTheme === "dim"
                 ? "bg-tint border-tint text-foreground font-bold shadow-sm ring-1 ring-tint/70"
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {(theme ?? "system") === "dim" && "✓ "}Dim
+              {currentTheme === "dim" && "✓ "}Dim
             </button>
           </div>
         </SettingSection>

@@ -21,6 +21,12 @@ import { CommunityScale, CommunityStatus, Needs } from '@/types/core_game_types'
  */
 const SCHEMA_VERSION = 4;
 
+export type ScaleOption = {
+  key: CommunityScale;
+  label: string;
+  requirement: number;
+};
+
 export type CommonsState = {
   suppliesFood: number;
   suppliesShelter: number;

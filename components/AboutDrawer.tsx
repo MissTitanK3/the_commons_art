@@ -65,7 +65,7 @@ export function AboutDrawer({ isOpen, onClose }: AboutDrawerProps) {
         aria-labelledby="about-title"
         className="sm:max-w-sm border border-surface-alt shadow-2xl bg-background rounded-lg w-[90vw] max-w-md"
       >
-        <div className="flex-row items-center justify-between gap-2 border-b border-surface-alt pb-3">
+        <div className="flex-row items-center justify-between gap-2 border-b border-surface-alt pb-3 w-full flex px-4 pt-4">
           <div>
             <div id="about-title">About The Commons</div>
             <div>The game and how it works</div>
