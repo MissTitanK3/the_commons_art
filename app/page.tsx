@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { AboutDrawer } from "@/components/AboutDrawer";
 import { CommunityGrid } from "@/components/CommunityGrid";
 import { CommunityScaleSummary } from "@/components/CommunityScaleSummary";
+import { GrowthDecisionModal } from "@/components/GrowthDecisionModal";
+import { PrestigeModal } from "@/components/PrestigeModal";
 import { SuppliesGrid } from "@/components/SuppliesGrid";
 import { useCommonsStore, type CommonsState } from "@/state/store";
 import { TICK_INTERVAL_MS } from "@/systems/tick";
@@ -14,6 +16,8 @@ export default function HomePage() {
   const [hydrated, setHydrated] = useState(false);
   const [catchingUp, setCatchingUp] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [growthDecisionOpen, setGrowthDecisionOpen] = useState(false);
+  const isDev = process.env.NODE_ENV === "development";
   const hydrate = useCommonsStore((s: CommonsState) => s.hydrate);
   const persist = useCommonsStore((s: CommonsState) => s.persist);
   const tick = useCommonsStore((s: CommonsState) => s.tick);
@@ -22,7 +26,9 @@ export default function HomePage() {
   const maybeTriggerEvent = useCommonsStore((s: CommonsState) => s.maybeTriggerEvent);
   const getCurrentEvent = useCommonsStore((s: CommonsState) => s.getCurrentEvent);
   const currentEventId = useCommonsStore((s: CommonsState) => s.currentEventId);
+  const pendingGrowthDecisionId = useCommonsStore((s: CommonsState) => s.pendingGrowthDecisionId);
   const resolveEvent = useCommonsStore((s: CommonsState) => s.resolveEvent);
+  const devAddSupplies = useCommonsStore((s: CommonsState) => s.devAddSupplies);
   const currentEvent = getCurrentEvent();
   const pendingDecisionCount = currentEventId ? 1 : 0;
   const hydratedRef = useRef(false);
@@ -140,6 +146,12 @@ export default function HomePage() {
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [eventModalOpen]);
 
+  useEffect(() => {
+    if (pendingGrowthDecisionId) {
+      setGrowthDecisionOpen(true);
+    }
+  }, [pendingGrowthDecisionId]);
+
   return (
     <main className="relative min-h-screen text-text overflow-x-hidden">
       {(!hydrated || catchingUp) && (
@@ -151,7 +163,7 @@ export default function HomePage() {
       )}
 
       {/* Info Button */}
-      <div className="w-full flex justify-between">
+      <div className="w-full flex justify-between items-center gap-3">
         <button
           onClick={() => setAboutOpen(true)}
           className="p-2 bg-surface-alt rounded-lg hover:bg-surface transition-colors"
@@ -159,6 +171,15 @@ export default function HomePage() {
         >
           <Info size={30} />
         </button>
+
+        {isDev && devAddSupplies && (
+          <button
+            onClick={() => devAddSupplies(10000)}
+            className="px-3 py-2 rounded-lg border border-border text-xs font-semibold bg-surface-alt hover:opacity-90"
+          >
+            DEV: Add 10k supplies
+          </button>
+        )}
       </div>
 
       {/* Header Section */}
@@ -182,7 +203,7 @@ export default function HomePage() {
         <CommunityGrid />
 
         {/* Community Scale Summary */}
-        <CommunityScaleSummary />
+        <CommunityScaleSummary onOpenGrowthDecision={() => setGrowthDecisionOpen(true)} />
       </section>
 
       {/* About Drawer */}
@@ -237,6 +258,9 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <GrowthDecisionModal open={growthDecisionOpen} onClose={() => setGrowthDecisionOpen(false)} />
+      <PrestigeModal />
     </main>
   );
 }

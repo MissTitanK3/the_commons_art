@@ -114,7 +114,7 @@ export const tradeOptions = [
   },
 ] as const;
 
-export const memberCount = 4; // Hardcoded for now, represents community members needing help
+export const memberCount = 3; // Hardcoded for now, represents community members needing help
 
 export const categories: Category[] = ['food', 'shelter', 'care'];
 

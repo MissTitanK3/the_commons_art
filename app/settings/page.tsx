@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTheme } from "next-themes";
 
 import { PresetButton } from "@/components/settings/PresetButton";
@@ -8,15 +9,27 @@ import { ToggleButton } from "@/components/settings/ToggleButton";
 import { useThemePrefs } from "@/state/ui";
 import { CommonsState, useCommonsStore } from "@/state/store";
 import { THEME_PRESETS } from "@/config/constants";
+import { APP_VERSION } from "@/config/version";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { highContrast, setHighContrast, accentPreset, setAccentPreset } = useThemePrefs();
   const devReset = useCommonsStore((s: CommonsState) => s.devReset);
+  const prestigeStars = useCommonsStore((s: CommonsState) => s.prestigeStars);
+  const resetProgress = useCommonsStore((s: CommonsState) => s.resetProgress);
+
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   const isDev = process.env.NODE_ENV === "development";
 
-  const currentTheme = theme ?? "system";
+  const hasTheme = typeof theme === "string" && theme.length > 0;
+  const currentTheme = hasTheme ? theme : undefined;
+
+  const handleResetProgress = async () => {
+    if (prestigeStars <= 0) return;
+    await resetProgress?.();
+    setIsResetModalOpen(false);
+  };
 
   return (
     <main className="min-h-screen bg-background text-text overflow-x-hidden px-4">
@@ -58,7 +71,7 @@ export default function SettingsPage() {
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {currentTheme === "system" && "✓ "}System
+              {hasTheme && currentTheme === "system" && "✓ "}System
             </button>
             <button
               onClick={() => setTheme("light")}
@@ -67,7 +80,7 @@ export default function SettingsPage() {
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {currentTheme === "light" && "✓ "}Light
+              {hasTheme && currentTheme === "light" && "✓ "}Light
             </button>
             <button
               onClick={() => setTheme("dark")}
@@ -76,7 +89,7 @@ export default function SettingsPage() {
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {currentTheme === "dark" && "✓ "}Dark
+              {hasTheme && currentTheme === "dark" && "✓ "}Dark
             </button>
             <button
               onClick={() => setTheme("lofi")}
@@ -85,7 +98,7 @@ export default function SettingsPage() {
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {currentTheme === "lofi" && "✓ "}Lofi
+              {hasTheme && currentTheme === "lofi" && "✓ "}Lofi
             </button>
             <button
               onClick={() => setTheme("dim")}
@@ -94,7 +107,7 @@ export default function SettingsPage() {
                 : "bg-surface-alt border-border"
                 }`}
             >
-              {currentTheme === "dim" && "✓ "}Dim
+              {hasTheme && currentTheme === "dim" && "✓ "}Dim
             </button>
           </div>
         </SettingSection>
@@ -121,6 +134,60 @@ export default function SettingsPage() {
             ))}
           </div>
         </SettingSection>
+
+        {/* Version & Data */}
+        <SettingSection
+          title="Version & Data"
+          description="Used to keep service workers (offline and pwa, not network) and saved data in sync"
+        >
+          <div className="text-sm leading-relaxed space-y-2">
+            <p>
+              <span className="font-semibold">Current version:</span> {APP_VERSION}
+            </p>
+            <p className="text-text opacity-70">
+              When we ship breaking updates, we bump this to reset the service worker and stored state so
+              everything stays in step.
+            </p>
+          </div>
+
+          {prestigeStars > 0 && (
+            <button
+              onClick={() => setIsResetModalOpen(true)}
+              className="mt-4 w-full py-2 px-3 rounded-lg border border-red-300 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-200 hover:opacity-90 transition-opacity text-sm font-semibold"
+            >
+              Reset progress to zero stars
+            </button>
+          )}
+        </SettingSection>
+
+        {isResetModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm px-4">
+            <div className="w-full max-w-md bg-surface rounded-xl border border-border shadow-xl p-5 space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase opacity-70">Reset progress</p>
+                <h2 className="text-lg font-semibold">Start from zero stars?</h2>
+                <p className="text-sm text-text opacity-75">
+                  This clears your stored game data and restarts at zero stars. This cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 text-sm">
+                <button
+                  onClick={handleResetProgress}
+                  className="w-full py-2 px-3 rounded-lg border-2 border-red-400 text-red-700 dark:text-red-200 font-semibold hover:opacity-90"
+                >
+                  Yes, reset everything
+                </button>
+                <button
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="w-full py-2 px-3 rounded-lg border border-border font-semibold hover:opacity-90"
+                >
+                  Keep my progress
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* About */}
         <SettingSection title="About">

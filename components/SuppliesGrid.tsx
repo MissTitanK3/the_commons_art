@@ -1,10 +1,11 @@
 'use client';
 
 import { Bell } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORY_COLORS, CATEGORY_ICONS, CATEGORY_LABELS } from '@/config/constants';
 import { CommonsState, useCommonsStore } from '@/state/store';
 import { BASE_SUPPLY_RATE, NEED_DRAIN, TICK_INTERVAL_MS } from '@/systems/tick';
+import { buildGrowthProfile } from '@/systems/growthDecisions';
 
 type Props = {
   pendingDecisionCount?: number;
@@ -19,8 +20,11 @@ export function SuppliesGrid({ pendingDecisionCount = 0, onEventBellClick }: Pro
   const priorityShelter = useCommonsStore((s: CommonsState) => s.priority.shelter);
   const priorityCare = useCommonsStore((s: CommonsState) => s.priority.care);
   const volunteerTime = useCommonsStore((s: CommonsState) => s.volunteerTime);
+  const growthDecisionSelections = useCommonsStore((s: CommonsState) => s.growthDecisionSelections);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  const growthProfile = useMemo(() => buildGrowthProfile(growthDecisionSelections), [growthDecisionSelections]);
 
   useEffect(() => {
     refreshTimers.current.forEach(clearTimeout);
@@ -48,26 +52,60 @@ export function SuppliesGrid({ pendingDecisionCount = 0, onEventBellClick }: Pro
   const totalPriority = priorityFood + priorityShelter + priorityCare;
   const secondsPerTick = TICK_INTERVAL_MS / 1000;
   const efficiency = Math.min(1, volunteerTime / 10);
+  const supplyRate = BASE_SUPPLY_RATE * growthProfile.supplyGainMultiplier;
+  const tickLabel = `${secondsPerTick.toFixed(0)}s tick`;
 
   const perTickDeltaByKey: Record<typeof supplies[number]['key'], number> = {
     food: (() => {
       const weight = totalPriority === 0 ? 0 : priorityFood / totalPriority;
-      const gain = BASE_SUPPLY_RATE * weight * secondsPerTick;
+      const gain = supplyRate * weight * secondsPerTick;
       const drain = NEED_DRAIN.food * priorityFood * secondsPerTick * efficiency;
       return gain - drain;
     })(),
     shelter: (() => {
       const weight = totalPriority === 0 ? 0 : priorityShelter / totalPriority;
-      const gain = BASE_SUPPLY_RATE * weight * secondsPerTick;
+      const gain = supplyRate * weight * secondsPerTick;
       const drain = NEED_DRAIN.shelter * priorityShelter * secondsPerTick * efficiency;
       return gain - drain;
     })(),
     care: (() => {
       const weight = totalPriority === 0 ? 0 : priorityCare / totalPriority;
-      const gain = BASE_SUPPLY_RATE * weight * secondsPerTick;
+      const gain = supplyRate * weight * secondsPerTick;
       const drain = NEED_DRAIN.care * priorityCare * secondsPerTick * efficiency;
       return gain - drain;
     })(),
+  };
+
+  const totalPerTick = perTickDeltaByKey.food + perTickDeltaByKey.shelter + perTickDeltaByKey.care;
+
+  const effectChips = [
+    {
+      label: 'Supply gain',
+      value: `x${growthProfile.supplyGainMultiplier.toFixed(2)}`,
+      neutral: Math.abs(growthProfile.supplyGainMultiplier - 1) < 0.001,
+    },
+    {
+      label: 'Need growth',
+      value: `x${growthProfile.needGenerationMultiplier.toFixed(2)}`,
+      neutral: Math.abs(growthProfile.needGenerationMultiplier - 1) < 0.001,
+    },
+    {
+      label: 'Event +/-',
+      value: `x${growthProfile.eventPositiveMultiplier.toFixed(2)} / x${growthProfile.eventNegativeMultiplier.toFixed(2)}`,
+      neutral:
+        Math.abs(growthProfile.eventPositiveMultiplier - 1) < 0.001 &&
+        Math.abs(growthProfile.eventNegativeMultiplier - 1) < 0.001,
+    },
+    {
+      label: 'Resilience bias',
+      value: growthProfile.resilienceBias.toFixed(2),
+      neutral: Math.abs(growthProfile.resilienceBias) < 0.001,
+    },
+  ].filter((item) => !item.neutral);
+
+  const baseChip = {
+    label: 'Base gain',
+    value: `${(BASE_SUPPLY_RATE * secondsPerTick).toFixed(2)} / ${tickLabel}`,
   };
 
   return (
@@ -107,7 +145,7 @@ export function SuppliesGrid({ pendingDecisionCount = 0, onEventBellClick }: Pro
               <div className="text-right">
                 <div className="text-lg font-bold">{value.toFixed(1)}</div>
                 <div className="text-xs text-text opacity-60">
-                  {perTickDeltaByKey[key] >= 0 ? '+' : ''}{perTickDeltaByKey[key].toFixed(2)} / tick
+                  {perTickDeltaByKey[key] >= 0 ? '+' : ''}{perTickDeltaByKey[key].toFixed(2)} / {tickLabel}
                 </div>
               </div>
             </div>
@@ -119,8 +157,25 @@ export function SuppliesGrid({ pendingDecisionCount = 0, onEventBellClick }: Pro
         <div className="text-center text-sm">
           <span className="font-semibold">Total: {total.toFixed(1)} supplies</span>
           <div className="text-xs text-text opacity-60 mt-1">
-            Drains shown per 5s tick (higher volunteer time reduces loss)
+            Net rate: {totalPerTick >= 0 ? '+' : ''}{totalPerTick.toFixed(2)} / {tickLabel}
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 justify-center text-[11px] text-text opacity-80">
+          <span className="px-2 py-1 rounded-full border border-border bg-surface-alt">
+            {baseChip.label}: {baseChip.value}
+          </span>
+          {effectChips.length === 0 ? (
+            <span className="px-2 py-1 rounded-full border border-border bg-surface-alt">
+              No additional effects active
+            </span>
+          ) : (
+            effectChips.map((chip) => (
+              <span key={chip.label} className="px-2 py-1 rounded-full border border-border bg-surface-alt">
+                {chip.label}: {chip.value}
+              </span>
+            ))
+          )}
         </div>
       </div>
     </div>

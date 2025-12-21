@@ -18,7 +18,7 @@ export function CommunityGrid() {
   });
   return (
     <div className="w-full max-w-sm mx-auto px-4 py-4 bg-surface rounded-xl mt-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4 sm:gap-0">
         <h2 className="text-lg font-semibold">Community Needs</h2>
         <button
           onClick={() => categories.forEach((category) => helpMembersMax(category))}

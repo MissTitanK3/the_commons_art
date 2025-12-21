@@ -2,11 +2,11 @@ import { TickInput } from '@/types/core_game_types';
 import { BASE_SUPPLY_RATE, NEED_DRAIN } from './tick';
 
 export function applyTick(input: TickInput) {
-  const { supplies, priority, volunteerTime, elapsedSeconds } = input;
+  const { supplies, priority, volunteerTime, elapsedSeconds, growthProfile } = input;
   const totalPriority = priority.food + priority.shelter + priority.care;
   const weight = (value: number) => (totalPriority === 0 ? 0 : value / totalPriority);
 
-  const supplyGainTotal = BASE_SUPPLY_RATE * elapsedSeconds;
+  const supplyGainTotal = BASE_SUPPLY_RATE * (growthProfile?.supplyGainMultiplier ?? 1) * elapsedSeconds;
   const gainFood = supplyGainTotal * weight(priority.food);
   const gainShelter = supplyGainTotal * weight(priority.shelter);
   const gainCare = supplyGainTotal * weight(priority.care);
