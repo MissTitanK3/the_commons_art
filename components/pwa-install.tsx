@@ -82,9 +82,17 @@ export default function PWAInstall() {
 
   return (
     <div className="fixed bottom-4 right-4 z-50 bg-primary text-primary-foreground rounded-lg shadow-lg p-4 max-w-sm">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col items-start gap-3">
         <div className="flex-1">
-          <h3 className="font-semibold text-sm mb-1">Install App</h3>
+          <div className='flex w-full justify-between'>
+            <h3 className="font-semibold text-sm mb-1">Install App</h3>
+            <button
+              onClick={() => setShowPrompt(false)}
+              className="text-xs opacity-75 hover:opacity-100 ml-2 shrink-0"
+            >
+              ✕
+            </button>
+          </div>
           <p className="text-xs opacity-90">Add The Commons Game to your home screen for quick access</p>
         </div>
         <button
@@ -92,12 +100,6 @@ export default function PWAInstall() {
           className="mt-3 w-full px-3 py-2 bg-primary-foreground text-primary rounded font-medium text-sm hover:opacity-90 transition-opacity"
         >
           Install
-        </button>
-        <button
-          onClick={() => setShowPrompt(false)}
-          className="text-xs opacity-75 hover:opacity-100 ml-2 shrink-0"
-        >
-          ✕
         </button>
       </div>
     </div>
