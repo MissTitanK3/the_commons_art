@@ -5,21 +5,7 @@ import { useMemo } from 'react';
 
 import { SCALE_LABELS } from '@/config/constants';
 import { CommonsState, useCommonsStore } from '@/state/store';
-import { CommunityValueFlags } from '@/types/core_game_types';
-
-const VALUE_FLAG_LABELS: Record<keyof CommunityValueFlags, string> = {
-  trustFocused: 'Trust-first relations',
-  careFirst: 'Care-first community',
-  informalCoordination: 'Informal coordination',
-  participatoryGovernance: 'Participatory governance',
-  denseLiving: 'Living closely to share resources',
-  identityStrong: 'Strong local identity',
-  adaptiveGovernance: 'Adaptive governance',
-  aidAnchor: 'Regional mutual aid',
-};
-
-const toHumanValueFlag = (flag: keyof CommunityValueFlags) => VALUE_FLAG_LABELS[flag] ?? flag;
-import { findGrowthDecision } from '@/systems/growthDecisions';
+import { findGrowthDecision, getValueFlagLabel } from '@/systems/growthDecisions';
 
 type GrowthDecisionModalProps = {
   open: boolean;
@@ -76,11 +62,9 @@ export function GrowthDecisionModal({ open, onClose }: GrowthDecisionModalProps)
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold">{choice.title}</p>
-                  {choice.valueFlag && (
-                    <p className="text-[11px] text-green-700 dark:text-green-300 font-semibold mt-0.5">
-                      Writes value flag: {toHumanValueFlag(choice.valueFlag)}
-                    </p>
-                  )}
+                  <p className="text-[11px] text-text opacity-70">
+                    Identity: {getValueFlagLabel(choice.valueFlag ?? choice.key, choice.title)}
+                  </p>
                 </div>
                 <span className="text-[11px] text-text opacity-70">Permanent</span>
               </div>

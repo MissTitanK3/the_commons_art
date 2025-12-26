@@ -51,27 +51,27 @@ export function SuppliesGrid({ pendingDecisionCount = 0, onEventBellClick }: Pro
 
   const totalPriority = priorityFood + priorityShelter + priorityCare;
   const secondsPerTick = TICK_INTERVAL_MS / 1000;
-  const efficiency = Math.min(1, volunteerTime / 10);
   const supplyRate = BASE_SUPPLY_RATE * growthProfile.supplyGainMultiplier;
   const tickLabel = `${secondsPerTick.toFixed(0)}s tick`;
+  const strain = Math.min(1.5, 1 + Math.max(0, (8 - volunteerTime) * 0.05));
 
   const perTickDeltaByKey: Record<typeof supplies[number]['key'], number> = {
     food: (() => {
       const weight = totalPriority === 0 ? 0 : priorityFood / totalPriority;
       const gain = supplyRate * weight * secondsPerTick;
-      const drain = NEED_DRAIN.food * priorityFood * secondsPerTick * efficiency;
+      const drain = NEED_DRAIN.food * priorityFood * secondsPerTick * strain;
       return gain - drain;
     })(),
     shelter: (() => {
       const weight = totalPriority === 0 ? 0 : priorityShelter / totalPriority;
       const gain = supplyRate * weight * secondsPerTick;
-      const drain = NEED_DRAIN.shelter * priorityShelter * secondsPerTick * efficiency;
+      const drain = NEED_DRAIN.shelter * priorityShelter * secondsPerTick * strain;
       return gain - drain;
     })(),
     care: (() => {
       const weight = totalPriority === 0 ? 0 : priorityCare / totalPriority;
       const gain = supplyRate * weight * secondsPerTick;
-      const drain = NEED_DRAIN.care * priorityCare * secondsPerTick * efficiency;
+      const drain = NEED_DRAIN.care * priorityCare * secondsPerTick * strain;
       return gain - drain;
     })(),
   };
@@ -155,7 +155,7 @@ export function SuppliesGrid({ pendingDecisionCount = 0, onEventBellClick }: Pro
 
       <div className="border-t border-tint mt-3 pt-3">
         <div className="text-center text-sm">
-          <span className="font-semibold">Total: {total.toFixed(1)} supplies</span>
+          <span className="font-semibold">Supply Gather Rate: {total.toFixed(1)}</span>
           <div className="text-xs text-text opacity-60 mt-1">
             Net rate: {totalPerTick >= 0 ? '+' : ''}{totalPerTick.toFixed(2)} / {tickLabel}
           </div>

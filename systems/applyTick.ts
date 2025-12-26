@@ -11,11 +11,12 @@ export function applyTick(input: TickInput) {
   const gainShelter = supplyGainTotal * weight(priority.shelter);
   const gainCare = supplyGainTotal * weight(priority.care);
 
-  const efficiency = Math.min(1, volunteerTime / 10);
+  // Volunteer strain raises drains when time is low; capped to avoid runaway loss.
+  const strain = Math.min(1.5, 1 + Math.max(0, (8 - volunteerTime) * 0.05));
 
-  const foodDrain = NEED_DRAIN.food * priority.food * elapsedSeconds * efficiency;
-  const shelterDrain = NEED_DRAIN.shelter * priority.shelter * elapsedSeconds * efficiency;
-  const careDrain = NEED_DRAIN.care * priority.care * elapsedSeconds * efficiency;
+  const foodDrain = NEED_DRAIN.food * priority.food * elapsedSeconds * strain;
+  const shelterDrain = NEED_DRAIN.shelter * priority.shelter * elapsedSeconds * strain;
+  const careDrain = NEED_DRAIN.care * priority.care * elapsedSeconds * strain;
 
   const nextFood = Math.max(0, supplies.food + gainFood - foodDrain);
   const nextShelter = Math.max(0, supplies.shelter + gainShelter - shelterDrain);

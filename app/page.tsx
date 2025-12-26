@@ -248,6 +248,9 @@ export default function HomePage() {
                     >
                       <span className="block text-xs uppercase opacity-70 mb-1">Choice {choice.id}</span>
                       <span className="block">{choice.label}</span>
+                      {choice.effectDescription && (
+                        <span className="block text-xs opacity-70 mt-1">{choice.effectDescription}</span>
+                      )}
                     </button>
                   ))}
                 </div>

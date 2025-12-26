@@ -2,6 +2,7 @@ import { SCALE_ORDER } from '@/config/constants';
 import {
   CommunityScale,
   CommunityValueFlags,
+  CommunityValueFlagKey,
   GrowthDecisionChoiceKey,
   GrowthDecisionId,
   GrowthDecisionSelections,
@@ -24,6 +25,31 @@ export type GrowthDecision = {
   systemsAffected: string[];
 };
 
+export const VALUE_FLAG_LABELS: Partial<Record<CommunityValueFlagKey, string>> = {
+  trustFocused: 'Trust-first mutuality',
+  careFirst: 'Care-first ethic',
+  informalCoordination: 'Informal coordination',
+  participatoryGovernance: 'Participatory governance',
+  denseLiving: 'Dense shared living',
+  identityStrong: 'Identity-led culture',
+  adaptiveGovernance: 'Adaptive governance',
+  aidAnchor: 'Mutual aid anchor',
+  independent_units: 'Autonomy and independence',
+  work_first: 'Output-first mindset',
+  mixed_focus: 'Balanced approach',
+  formal_governance: 'Formal governance',
+  delegated_circles: 'Delegated circles',
+  distributed_living: 'Distributed layout',
+  specialization: 'Focused specialization',
+  layered_governance: 'Layered governance',
+  skill_sharing: 'Skill-sharing culture',
+};
+
+export const getValueFlagLabel = (
+  flagKey?: keyof CommunityValueFlags,
+  fallback?: string,
+): string => VALUE_FLAG_LABELS[flagKey as CommunityValueFlagKey] ?? fallback ?? flagKey ?? 'Not set';
+
 export const GROWTH_DECISIONS: GrowthDecision[] = [
   {
     id: 'house_block',
@@ -43,11 +69,13 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'skill_sharing',
         title: 'Skill Sharing',
         effects: ['Faster task completion', 'Higher burnout risk'],
+        valueFlag: 'trustFocused',
       },
       {
         key: 'independent_units',
         title: 'Independent Units',
         effects: ['Strong personal resilience', 'Weaker collective response'],
+        valueFlag: 'independent_units',
       },
     ],
     systemsAffected: ['Resource variance', 'Task speed', 'Burnout pressure'],
@@ -70,11 +98,13 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'work_first',
         title: 'Work First',
         effects: ['Higher output', 'Morale decays faster'],
+        valueFlag: 'work_first',
       },
       {
         key: 'mixed_focus',
         title: 'Mixed Focus',
         effects: ['Balanced outcomes', 'No strong bias'],
+        valueFlag: 'mixed_focus',
       },
     ],
     systemsAffected: ['Wellbeing regen', 'Growth thresholds', 'Morale stability'],
@@ -97,11 +127,13 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'structured_roles',
         title: 'Structured Roles',
         effects: ['Predictable outcomes', 'Slower adaptation'],
+        valueFlag: 'formal_governance',
       },
       {
         key: 'rotating_responsibility',
         title: 'Rotating Responsibility',
         effects: ['Shared load', 'Coordination overhead'],
+        valueFlag: 'participatoryGovernance',
       },
     ],
     systemsAffected: ['Event resolution variance', 'Coordination cost', 'Task overlap efficiency'],
@@ -118,6 +150,7 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'central_council',
         title: 'Central Council',
         effects: ['Stability and clarity', 'Reduced flexibility'],
+        valueFlag: 'formal_governance',
       },
       {
         key: 'open_assemblies',
@@ -129,6 +162,7 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'delegated_circles',
         title: 'Delegated Circles',
         effects: ['Parallel progress', 'Communication friction'],
+        valueFlag: 'delegated_circles',
       },
     ],
     systemsAffected: ['Decision latency', 'Morale floor', 'Parallel task capacity'],
@@ -151,11 +185,13 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'distributed_living',
         title: 'Distributed Living',
         effects: ['Higher resilience', 'Slower logistics'],
+        valueFlag: 'distributed_living',
       },
       {
         key: 'hybrid_layout',
         title: 'Hybrid Layout',
         effects: ['Moderate efficiency', 'Moderate strain'],
+        valueFlag: 'mixed_focus',
       },
     ],
     systemsAffected: ['Resource efficiency', 'Crisis amplification', 'Logistics delay'],
@@ -178,11 +214,13 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'open_growth',
         title: 'Open Growth',
         effects: ['Faster population growth', 'Cultural drift'],
+        valueFlag: 'work_first',
       },
       {
         key: 'specialization',
         title: 'Specialization',
         effects: ['Strong bonuses in one area', 'Weaker overall balance'],
+        valueFlag: 'specialization',
       },
     ],
     systemsAffected: ['Morale decay', 'Expansion rate', 'Specialization modifiers'],
@@ -199,6 +237,7 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'formal_governance',
         title: 'Formal Governance',
         effects: ['Predictable outcomes', 'Slower crisis response'],
+        valueFlag: 'formal_governance',
       },
       {
         key: 'adaptive_governance',
@@ -210,6 +249,7 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'layered_governance',
         title: 'Layered Governance',
         effects: ['Redundancy and safety', 'Maintenance cost'],
+        valueFlag: 'layered_governance',
       },
     ],
     systemsAffected: ['Crisis resolution curves', 'Variance bands', 'Upkeep pressure'],
@@ -232,11 +272,13 @@ export const GROWTH_DECISIONS: GrowthDecision[] = [
         key: 'self_sustaining_region',
         title: 'Self-Sustaining Region',
         effects: ['Internal efficiency high', 'Limited external support'],
+        valueFlag: 'independent_units',
       },
       {
         key: 'knowledge_training_hub',
         title: 'Knowledge & Training Hub',
         effects: ['Permanent skill uplift', 'Slower material growth'],
+        valueFlag: 'skill_sharing',
       },
     ],
     systemsAffected: ['External event modifiers', 'Internal efficiency scaling', 'Skill persistence'],
@@ -388,6 +430,21 @@ const BASE_PROFILE: GrowthModifierProfile = {
 const clampMultiplier = (value: number, min = 0.85, max = 1.25) => Math.min(max, Math.max(min, value));
 const clampResilience = (value: number) => Math.min(0.3, Math.max(-0.3, value));
 
+const makeEmptyValueFlags = (): CommunityValueFlags => {
+  const flags: Partial<CommunityValueFlags> = {};
+  GROWTH_DECISIONS.forEach((decision) => {
+    decision.choices.forEach((choice) => {
+      const flagKey = (choice.valueFlag ?? choice.key) as keyof CommunityValueFlags;
+      flags[flagKey] = false;
+      // Keep the original choice key present even when sharing a value flag
+      if (choice.key !== flagKey) {
+        flags[choice.key as keyof CommunityValueFlags] ??= false;
+      }
+    });
+  });
+  return flags as CommunityValueFlags;
+};
+
 export function buildGrowthProfile(selections: GrowthDecisionSelections): GrowthModifierProfile {
   let profile = { ...BASE_PROFILE };
 
@@ -417,23 +474,15 @@ export function buildGrowthProfile(selections: GrowthDecisionSelections): Growth
 }
 
 export function deriveCommunityValueFlags(selections: GrowthDecisionSelections): CommunityValueFlags {
-  const flags: CommunityValueFlags = {
-    trustFocused: false,
-    careFirst: false,
-    informalCoordination: false,
-    participatoryGovernance: false,
-    denseLiving: false,
-    identityStrong: false,
-    adaptiveGovernance: false,
-    aidAnchor: false,
-  };
+  const flags: CommunityValueFlags = makeEmptyValueFlags();
 
   GROWTH_DECISIONS.forEach((decision) => {
     const chosen = selections[decision.id];
     if (!chosen) return;
     const pickedChoice = decision.choices.find((c) => c.key === chosen);
-    if (pickedChoice?.valueFlag) {
-      flags[pickedChoice.valueFlag] = true;
+    const flagKey = (pickedChoice?.valueFlag ?? pickedChoice?.key) as keyof CommunityValueFlags | undefined;
+    if (flagKey) {
+      flags[flagKey] = true;
     }
   });
 

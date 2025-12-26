@@ -10,10 +10,18 @@ import {
   deriveCommunityValueFlags,
   getPendingGrowthDecisionId,
   GROWTH_DECISIONS,
+  getValueFlagLabel,
 } from '@/systems/growthDecisions';
 import { getNeedDirection } from '@/systems/needs';
 import { normalizePriority } from '@/systems/priority';
-import { canSustainScale, getGracePeriodMs, getScaleTierIndex, NEED_GENERATION_RATE } from '@/systems/scaleMetrics';
+import {
+  canSustainScale,
+  getGracePeriodMs,
+  getScaleTierIndex,
+  NEED_GENERATION_RATE,
+  PRESTIGE_REQUIREMENT_STEP,
+  SCALE_REQUIREMENTS,
+} from '@/systems/scaleMetrics';
 import { OFFLINE_CAP_MS } from '@/systems/tick';
 import { calculateStatus } from '@/systems/status';
 import { APP_VERSION } from '@/config/version';
@@ -29,6 +37,7 @@ import {
   LegacyRunRecord,
   Needs,
 } from '@/types/core_game_types';
+import { EventChoiceId } from '@/types/global_types';
 
 /**
  * Schema version for persisted state
@@ -74,7 +83,7 @@ export type CommonsState = {
   hasSeenCheckIn?: boolean;
   currentEventId?: string;
   lastEventAt?: number;
-  eventLog: { id: string; choice: 'A' | 'B'; at: number }[];
+  eventLog: { id: string; choice: EventChoiceId; at: number; wipe?: { target: keyof Needs; fraction: number } }[];
   lastUnsustainableAt?: number; // Track when current scale became unsustainable
   selfCareActionTimestamps: Record<string, number>; // Track when each self-care action was last completed
   growthDecisionSelections: GrowthDecisionSelections;
@@ -106,7 +115,7 @@ export type CommonsState = {
   isCheckInEligible: () => boolean;
   submitCheckIn: () => void;
   maybeTriggerEvent: () => void;
-  resolveEvent: (choiceId: 'A' | 'B') => void;
+  resolveEvent: (choiceId: EventChoiceId) => void;
   getCurrentEvent: () => (typeof EVENTS)[number] | undefined;
   chooseGrowthDecision: (decisionId: GrowthDecisionId, choiceKey: GrowthDecisionChoiceKey) => void;
   refreshPendingGrowthDecision: () => void;
@@ -172,7 +181,7 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
     lastActiveAt: Date.now(),
   });
 
-  const scaleRequirement = (base: number, prestigeStars: number) => base * (1 + prestigeStars * 0.25);
+  const scaleRequirement = (base: number, prestigeStars: number) => base * (1 + prestigeStars * PRESTIGE_REQUIREMENT_STEP);
 
   const buildPrestigeSummaryData = (state: CommonsState): PendingPrestigeSummary => {
     const decisions: PendingPrestigeDecision[] = Object.entries(state.growthDecisionSelections)
@@ -181,11 +190,12 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
         if (!decision || !choiceKey) return undefined;
         const choice = decision.choices.find((c) => c.key === choiceKey);
         if (!choice) return undefined;
+        const valueLabel = getValueFlagLabel(choice.valueFlag ?? choice.key, choice.title);
         return {
           id: decision.id,
           tier: `${decision.from} -> ${decision.to}`,
           prompt: decision.prompt,
-          choice: choice.title,
+          choice: `${choice.title} — ${valueLabel}`,
           summary: choice.effects.join('; '),
         } as PendingPrestigeDecision;
       })
@@ -193,17 +203,15 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
 
     const identitySummary = (() => {
       const flags = state.communityValues;
-      const themes: string[] = [];
-      if (flags.careFirst) themes.push('care over speed');
-      if (flags.informalCoordination) themes.push('informal coordination');
-      if (flags.participatoryGovernance) themes.push('participatory governance');
-      if (flags.denseLiving) themes.push('living closely to share resources');
-      if (flags.identityStrong) themes.push('strong local identity');
-      if (flags.adaptiveGovernance) themes.push('adaptive governance');
-      if (flags.trustFocused) themes.push('trust-first relations');
-      if (flags.aidAnchor) themes.push('regional mutual aid');
+      const themes = Object.entries(flags)
+        .filter(([, value]) => value)
+        .map(([key]) => getValueFlagLabel(key as keyof CommunityValueFlags))
+        .filter(Boolean);
       if (themes.length === 0) return 'This community was steady and pragmatic.';
-      return `This community leaned toward ${themes.join(', ')}.`;
+      const highlighted = themes.slice(0, 4);
+      const remaining = themes.length - highlighted.length;
+      const suffix = remaining > 0 ? `, plus ${remaining} more signals` : '';
+      return `This community leaned toward ${highlighted.join(', ')}${suffix}.`;
     })();
 
     return {
@@ -275,7 +283,13 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       );
 
       // Check if current scale is sustainable
-      const isSustainable = canSustainScale(state.communityScale);
+      const isSustainable = canSustainScale({
+        communityScale: state.communityScale,
+        supplyTrend,
+        needs: state.needs,
+        supplies: result.supplies,
+        resilienceBias: growthProfile.resilienceBias,
+      });
       const now = Date.now();
       let nextLastUnsustainableAt = state.lastUnsustainableAt;
       let nextScale = state.communityScale;
@@ -316,24 +330,7 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
             nextLastUnsustainableAt = undefined; // Reset timer for next tier
 
             // Reset investment accordingly
-            const requirements: Record<CommunityScale, number> = {
-              house: 0,
-              block: 120,
-              village: 200,
-              town: 300,
-              townhall: 450,
-              apartment: 650,
-              neighborhood: 900,
-              district: 1200,
-              borough: 1550,
-              municipal: 1950,
-              city: 2400,
-              metropolis: 2900,
-              county: 3500,
-              province: 4200,
-              region: 5000,
-            };
-            nextInvestment = Math.max(0, scaleRequirement(requirements[nextScale]!, state.prestigeStars));
+            nextInvestment = Math.max(0, scaleRequirement(SCALE_REQUIREMENTS[nextScale]!, state.prestigeStars));
           }
         }
       } else {
@@ -507,25 +504,7 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
     setCommunityScale: (scale) => {
       const state = get();
       const totalSupplies = state.suppliesFood + state.suppliesShelter + state.suppliesCare;
-      const requirements: Record<CommunityScale, number> = {
-        house: 0,
-        block: 120,
-        village: 200,
-        town: 300,
-        townhall: 450,
-        apartment: 650,
-        neighborhood: 900,
-        district: 1200,
-        borough: 1550,
-        municipal: 1950,
-        city: 2400,
-        metropolis: 2900,
-        county: 3500,
-        province: 4200,
-        region: 5000,
-      };
-
-      const required = scaleRequirement(requirements[scale], state.prestigeStars);
+      const required = scaleRequirement(SCALE_REQUIREMENTS[scale], state.prestigeStars);
       const currentInvestment = state.communityInvestment;
 
       if (currentInvestment >= required) {
@@ -734,7 +713,7 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       }
     },
 
-    resolveEvent: (choiceId) => {
+    resolveEvent: (choiceId: EventChoiceId) => {
       const state = get();
       const event = EVENTS.find((e) => e.id === state.currentEventId);
       if (!event) return;
@@ -777,17 +756,41 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       const shelterDelta = scaleEventDelta(effects.suppliesShelterDelta);
       const careDelta = scaleEventDelta(effects.suppliesCareDelta);
 
+      let nextSuppliesFood = Math.max(0, state.suppliesFood + foodDelta);
+      let nextSuppliesShelter = Math.max(0, state.suppliesShelter + shelterDelta);
+      let nextSuppliesCare = Math.max(0, state.suppliesCare + careDelta);
+
+      let appliedWipe: CommonsState['eventLog'][number]['wipe'];
+      if (effects.wipeRisk) {
+        const { target, chance, minFraction, maxFraction } = effects.wipeRisk;
+        const boundedChance = Math.max(0, Math.min(1, chance));
+        const lower = Math.max(0, Math.min(1, minFraction));
+        const upper = Math.max(lower, Math.min(1, maxFraction));
+        if (boundedChance > 0 && Math.random() < boundedChance) {
+          const fraction = lower + Math.random() * (upper - lower);
+          const apply = (current: number) => Math.max(0, current * (1 - fraction));
+          if (target === 'food') {
+            nextSuppliesFood = apply(nextSuppliesFood);
+          } else if (target === 'shelter') {
+            nextSuppliesShelter = apply(nextSuppliesShelter);
+          } else if (target === 'care') {
+            nextSuppliesCare = apply(nextSuppliesCare);
+          }
+          appliedWipe = { target, fraction };
+        }
+      }
+
       const now = Date.now();
 
       set(
         withTouch({
-          suppliesFood: Math.max(0, state.suppliesFood + foodDelta),
-          suppliesShelter: Math.max(0, state.suppliesShelter + shelterDelta),
-          suppliesCare: Math.max(0, state.suppliesCare + careDelta),
+          suppliesFood: nextSuppliesFood,
+          suppliesShelter: nextSuppliesShelter,
+          suppliesCare: nextSuppliesCare,
           priority: nextPriority,
           currentEventId: undefined,
           lastEventAt: now,
-          eventLog: [...state.eventLog, { id: event.id, choice: choiceId, at: now }],
+          eventLog: [...state.eventLog, { id: event.id, choice: choiceId, at: now, wipe: appliedWipe }],
         }),
       );
 
@@ -831,6 +834,8 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
     queuePrestigeSummary: () => {
       const state = get();
       if (state.communityScale !== 'region') return;
+      const pendingDecision = getPendingGrowthDecisionId(state.communityScale, state.growthDecisionSelections);
+      if (pendingDecision) return;
 
       const pendingPrestigeSummary = buildPrestigeSummaryData(state);
       set(withTouch({ pendingPrestigeSummary }));

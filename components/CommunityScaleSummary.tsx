@@ -2,12 +2,16 @@
 
 import { SCALE_LABELS, SCALE_ORDER } from "@/config/constants";
 import { CommonsState, useCommonsStore } from "@/state/store";
-import { findGrowthDecision, getDecisionForScale } from "@/systems/growthDecisions";
-import { CommunityScale } from "@/types/core_game_types";
+import { GROWTH_DECISIONS, findGrowthDecision, getDecisionForScale, getValueFlagLabel } from "@/systems/growthDecisions";
+import { PRESTIGE_REQUIREMENT_STEP, SCALE_REQUIREMENTS } from "@/systems/scaleMetrics";
+import { CommunityScale, CommunityValueFlags } from "@/types/core_game_types";
 
 type CommunityScaleSummaryProps = {
   onOpenGrowthDecision?: () => void;
 };
+
+const valueLabelForChoice = (flagKey: keyof CommunityValueFlags | undefined, fallbackTitle?: string) =>
+  getValueFlagLabel(flagKey, fallbackTitle);
 
 export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSummaryProps) {
   const communityScale = useCommonsStore((s: CommonsState) => s.communityScale);
@@ -18,38 +22,20 @@ export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSu
   const communityInvestment = useCommonsStore((s: CommonsState) => s.communityInvestment);
   const prestigeStars = useCommonsStore((s: CommonsState) => s.prestigeStars);
   const needs = useCommonsStore((s: CommonsState) => s.needs);
-  const communityValues = useCommonsStore((s: CommonsState) => s.communityValues);
+  const growthDecisionSelections = useCommonsStore((s: CommonsState) => s.growthDecisionSelections);
   const pendingGrowthDecisionId = useCommonsStore((s: CommonsState) => s.pendingGrowthDecisionId);
   const queuePrestigeSummary = useCommonsStore((s: CommonsState) => s.queuePrestigeSummary);
   const setCommunityScale = useCommonsStore((s: CommonsState) => s.setCommunityScale);
 
   const scaleIndex = SCALE_ORDER.indexOf(communityScale);
   const isMaxScale = scaleIndex === SCALE_ORDER.length - 1;
-  const requirementMultiplier = 1 + prestigeStars * 0.25;
+  const requirementMultiplier = 1 + prestigeStars * PRESTIGE_REQUIREMENT_STEP;
 
   let scaleStatus = 'Holding';
   if (status === 'well_supported') scaleStatus = 'Well Supported';
   else if (status === 'improving') scaleStatus = 'Improving';
   else if (status === 'stable') scaleStatus = 'Stable';
   else if (status === 'holding') scaleStatus = 'Holding';
-
-  const requirements: Record<CommunityScale, number> = {
-    house: 0,
-    block: 120,
-    village: 200,
-    town: 300,
-    townhall: 450,
-    apartment: 650,
-    neighborhood: 900,
-    district: 1200,
-    borough: 1550,
-    municipal: 1950,
-    city: 2400,
-    metropolis: 2900,
-    county: 3500,
-    province: 4200,
-    region: 5000,
-  };
 
   const supplies = {
     food: suppliesFood,
@@ -62,12 +48,30 @@ export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSu
 
   const nextScale: CommunityScale | null = !isMaxScale ? SCALE_ORDER[scaleIndex + 1] ?? null : null;
   const nextScaleLabel = nextScale ? SCALE_LABELS[nextScale] : null;
-  const requiredForNext = nextScale ? (requirements[nextScale] ?? 0) * requirementMultiplier : 0;
+  const requiredForNext = nextScale ? (SCALE_REQUIREMENTS[nextScale] ?? 0) * requirementMultiplier : 0;
   const gap = Math.max(0, requiredForNext - communityInvestment);
   const canInvestGap = gap <= totalSupplies;
   const canUpgrade = allNeedsMet && !isMaxScale && canInvestGap;
   const nextDecision = nextScale ? getDecisionForScale(nextScale) : undefined;
   const pendingDecision = findGrowthDecision(pendingGrowthDecisionId ?? undefined);
+  const pendingDecisionExists = Boolean(pendingGrowthDecisionId);
+
+  const selectedValues = GROWTH_DECISIONS.map((decision) => {
+    const selectedKey = growthDecisionSelections[decision.id];
+    const choice = decision.choices.find((c) => c.key === selectedKey);
+    const valueLabel = valueLabelForChoice(
+      (choice?.valueFlag ?? choice?.key) as keyof CommunityValueFlags | undefined,
+      choice?.title ?? 'Not set',
+    );
+    return {
+      id: decision.id,
+      theme: decision.theme,
+      prompt: decision.prompt,
+      choiceTitle: choice?.title ?? 'Not chosen yet',
+      valueLabel,
+      isSet: Boolean(choice),
+    };
+  });
 
   const handleUpgrade = () => {
     if (!nextScale) return;
@@ -150,15 +154,26 @@ export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSu
             </p>
             <div className="flex flex-wrap gap-2 text-[11px] text-text opacity-80">
               <span className="px-2 py-1 rounded-full border border-border">Current stars: {prestigeStars}</span>
-              <span className="px-2 py-1 rounded-full border border-border">Next star: x{(requirementMultiplier + 0.25).toFixed(2)} requirements</span>
+              <span className="px-2 py-1 rounded-full border border-border">
+                Next star: x{(requirementMultiplier + PRESTIGE_REQUIREMENT_STEP).toFixed(2)} requirements
+              </span>
             </div>
             <div className="flex flex-col gap-2">
               <button
                 onClick={queuePrestigeSummary}
-                className="w-full py-2 px-3 rounded-lg border-2 border-amber-500 text-amber-700 dark:text-amber-200 font-semibold hover:opacity-90"
+                disabled={pendingDecisionExists}
+                className={`w-full py-2 px-3 rounded-lg border-2 font-semibold ${pendingDecisionExists
+                  ? 'border-gray-400 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-60'
+                  : 'border-amber-500 text-amber-700 dark:text-amber-200 hover:opacity-90'
+                  }`}
               >
                 Begin New Community (+1 Star)
               </button>
+              {pendingDecisionExists && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-200 text-center">
+                  Resolve pending growth decisions before starting a new community.
+                </p>
+              )}
               <p className="text-[11px] text-text opacity-70 text-center">
                 Or continue indefinitely; prestige is always optional.
               </p>
@@ -170,35 +185,20 @@ export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSu
       {/* Community Values & Decisions */}
       <div className="mt-4 pt-3 border-t border-border">
         <p className="text-sm font-semibold mb-2">Community Values</p>
-        <div className="grid grid-cols-2 gap-2 text-xs text-text opacity-85">
-          {[{
-            label: 'Trust focused',
-            value: communityValues.trustFocused,
-          }, {
-            label: 'Care first',
-            value: communityValues.careFirst,
-          }, {
-            label: 'Informal coordination',
-            value: communityValues.informalCoordination,
-          }, {
-            label: 'Participatory governance',
-            value: communityValues.participatoryGovernance,
-          }, {
-            label: 'Dense living',
-            value: communityValues.denseLiving,
-          }, {
-            label: 'Identity strong',
-            value: communityValues.identityStrong,
-          }, {
-            label: 'Adaptive governance',
-            value: communityValues.adaptiveGovernance,
-          }, {
-            label: 'Aid anchor',
-            value: communityValues.aidAnchor,
-          }].map((item) => (
-            <div key={item.label} className={`px-3 py-2 rounded-lg border ${item.value ? 'border-green-500 text-green-600 dark:text-green-300' : 'border-border text-text opacity-75'}`}>
-              <span className="font-semibold block">{item.label}</span>
-              <span className="text-[11px] opacity-80">{item.value ? 'Set' : 'Not set'}</span>
+
+        <div className="space-y-2">
+          {selectedValues.map((item) => (
+            <div
+              key={item.id}
+              className={`px-3 py-2 rounded-lg border ${item.isSet ? 'border-green-500 text-green-700 dark:text-green-300' : 'border-border text-text opacity-75'
+                }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold">{item.theme}</span>
+                <span className="text-[11px] opacity-80">{item.isSet ? 'Set' : 'Pending'}</span>
+              </div>
+              <p className="text-sm font-semibold">{item.choiceTitle}</p>
+              <p className="text-[11px] text-text opacity-75">Identity: {item.valueLabel}</p>
             </div>
           ))}
         </div>

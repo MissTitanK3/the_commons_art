@@ -1,6 +1,35 @@
 import { CommonsEvent, EventEffect } from '@/types/global_types';
 import { EVENT_INTERVAL_MS, MIN_EVENT_SPACING_MS } from '@/utils/time';
 
+const DEFAULT_WIPE_RISK = {
+  chance: 0.15,
+  minFraction: 0.5,
+  maxFraction: 0.75,
+};
+
+// Scale all supply deltas (positive and negative) to make impacts meaningful but not overwhelming.
+const SUPPLY_DELTA_SCALE = 120;
+const PRIORITY_BOOST_SCALE = 10;
+
+const staticEffect = (effect: EventEffect) => {
+  const scaled = applyEffectScale(effect);
+  return {
+    effect: () => ({ ...scaled }),
+    effectDescription: describeEffect(scaled),
+  };
+};
+
+const applyEffectScale = (effect: EventEffect): EventEffect => {
+  const scaled: EventEffect = { ...effect };
+  if (scaled.suppliesFoodDelta !== undefined) scaled.suppliesFoodDelta *= SUPPLY_DELTA_SCALE;
+  if (scaled.suppliesShelterDelta !== undefined) scaled.suppliesShelterDelta *= SUPPLY_DELTA_SCALE;
+  if (scaled.suppliesCareDelta !== undefined) scaled.suppliesCareDelta *= SUPPLY_DELTA_SCALE;
+  if (scaled.foodPriorityBoost !== undefined) scaled.foodPriorityBoost *= PRIORITY_BOOST_SCALE;
+  if (scaled.shelterPriorityBoost !== undefined) scaled.shelterPriorityBoost *= PRIORITY_BOOST_SCALE;
+  if (scaled.carePriorityBoost !== undefined) scaled.carePriorityBoost *= PRIORITY_BOOST_SCALE;
+  return scaled;
+};
+
 export function describeEffect(effect: EventEffect): string {
   const parts: string[] = [];
 
@@ -28,6 +57,13 @@ export function describeEffect(effect: EventEffect): string {
   if (effect.carePriorityBoost !== undefined && effect.carePriorityBoost !== 0) {
     parts.push(
       `Care priority ${effect.carePriorityBoost > 0 ? '+' : ''}${(effect.carePriorityBoost * 100).toFixed(0)}%`,
+    );
+  }
+  if (effect.wipeRisk) {
+    parts.push(
+      `Wipe risk ${(effect.wipeRisk.chance * 100).toFixed(0)}%: ${(effect.wipeRisk.minFraction * 100).toFixed(
+        0,
+      )}–${(effect.wipeRisk.maxFraction * 100).toFixed(0)}% ${effect.wipeRisk.target}`,
     );
   }
 
@@ -58,12 +94,12 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Distribute broadly',
-        effect: () => ({ suppliesFoodDelta: 2 }),
+        ...staticEffect({ suppliesFoodDelta: 2 }),
       },
       {
         id: 'B',
         label: 'Hold for later',
-        effect: () => ({ suppliesFoodDelta: 1 }),
+        ...staticEffect({ suppliesFoodDelta: 1 }),
       },
     ],
   },
@@ -76,12 +112,17 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Stretch existing supplies',
-        effect: () => ({ suppliesFoodDelta: -0.34, suppliesShelterDelta: -0.33, suppliesCareDelta: -0.33 }),
+        ...staticEffect({
+          suppliesFoodDelta: -0.34,
+          suppliesShelterDelta: -0.33,
+          suppliesCareDelta: -0.33,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'food' },
+        }),
       },
       {
         id: 'B',
         label: 'Reprioritize needs',
-        effect: () => ({ foodPriorityBoost: 0.1 }),
+        ...staticEffect({ foodPriorityBoost: 0.1 }),
       },
     ],
   },
@@ -94,12 +135,58 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Use it for food',
-        effect: () => ({ foodPriorityBoost: 0.1 }),
+        ...staticEffect({ foodPriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Use it for shelter supplies',
-        effect: () => ({ shelterPriorityBoost: 0.1 }),
+        ...staticEffect({ shelterPriorityBoost: 0.1 }),
+      },
+    ],
+  },
+
+  {
+    id: 'spoiled_shipment',
+    title: 'A shipment spoils en route',
+    body: 'Not everything can be saved.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Compost and move on',
+        ...staticEffect({ suppliesFoodDelta: -1, wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'food' } }),
+      },
+      {
+        id: 'B',
+        label: 'Salvage what you can',
+        ...staticEffect({ suppliesFoodDelta: -0.4, wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'food' } }),
+      },
+      {
+        id: 'C',
+        label: 'Ask for replacements',
+        ...staticEffect({ foodPriorityBoost: 0.12 }),
+      },
+    ],
+  },
+
+  {
+    id: 'community_potluck',
+    title: 'Neighbors plan a potluck',
+    body: 'Food and care circulate together.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Open invite',
+        ...staticEffect({ suppliesFoodDelta: 1.2, carePriorityBoost: 0.05 }),
+      },
+      {
+        id: 'B',
+        label: 'Keep it simple',
+        ...staticEffect({ suppliesFoodDelta: 0.6 }),
+      },
+      {
+        id: 'C',
+        label: 'Save leftovers',
+        ...staticEffect({ suppliesFoodDelta: 0.45, suppliesCareDelta: 0.2 }),
       },
     ],
   },
@@ -116,12 +203,15 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Shift attention',
-        effect: () => ({ shelterPriorityBoost: 0.1 }),
+        ...staticEffect({ shelterPriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Use extra supplies',
-        effect: () => ({ suppliesShelterDelta: -1 }),
+        ...staticEffect({
+          suppliesShelterDelta: -1,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'shelter' },
+        }),
       },
     ],
   },
@@ -134,12 +224,41 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Adapt schedules',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Use additional resources',
-        effect: () => ({ suppliesCareDelta: -1 }),
+        ...staticEffect({
+          suppliesCareDelta: -1,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'care' },
+        }),
+      },
+    ],
+  },
+
+  {
+    id: 'storm_alert',
+    title: 'Storm alerts come through',
+    body: 'People brace for rough weather.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Board up and prep',
+        ...staticEffect({
+          suppliesShelterDelta: -0.5,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'shelter' },
+        }),
+      },
+      {
+        id: 'B',
+        label: 'Stage response routes',
+        ...staticEffect({ shelterPriorityBoost: 0.1 }),
+      },
+      {
+        id: 'C',
+        label: 'Check on neighbors',
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
     ],
   },
@@ -156,12 +275,12 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Slow things down',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Redistribute effort',
-        effect: () => ({
+        ...staticEffect({
           foodPriorityBoost: 0.05,
           shelterPriorityBoost: 0.05,
         }),
@@ -177,12 +296,90 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Pair them with care work',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Support logistics',
-        effect: () => ({ suppliesFoodDelta: 0.5, suppliesShelterDelta: 0.5 }),
+        ...staticEffect({ suppliesFoodDelta: 0.5, suppliesShelterDelta: 0.5 }),
+      },
+    ],
+  },
+
+  {
+    id: 'equipment_failure',
+    title: 'Key equipment fails',
+    body: 'Repairs will take effort.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Divert repairs immediately',
+        ...staticEffect({
+          suppliesShelterDelta: -0.8,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'shelter' },
+        }),
+      },
+      {
+        id: 'B',
+        label: 'Rally neighbors to fix it',
+        ...staticEffect({ shelterPriorityBoost: 0.12 }),
+      },
+      {
+        id: 'C',
+        label: 'Pause expansion plans',
+        ...staticEffect({ carePriorityBoost: 0.05 }),
+      },
+    ],
+  },
+
+  {
+    id: 'festival_rush',
+    title: 'A local festival needs support',
+    body: 'Attention gets pulled briefly.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Host an info booth',
+        ...staticEffect({
+          suppliesCareDelta: -0.6,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'care' },
+        }),
+      },
+      {
+        id: 'B',
+        label: 'Rotate shifts carefully',
+        ...staticEffect({ carePriorityBoost: 0.1 }),
+      },
+      {
+        id: 'C',
+        label: 'Share food with visitors',
+        ...staticEffect({
+          suppliesFoodDelta: -0.2,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'food' },
+        }),
+      },
+    ],
+  },
+
+  {
+    id: 'mentor_visit',
+    title: 'A mentor visits the team',
+    body: 'Fresh perspective arrives.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Pair them with logistics',
+        ...staticEffect({ suppliesFoodDelta: 0.5, suppliesShelterDelta: 0.5 }),
+      },
+      {
+        id: 'B',
+        label: 'Run a training session',
+        ...staticEffect({ carePriorityBoost: 0.12 }),
+      },
+      {
+        id: 'C',
+        label: 'Document best practices',
+        ...staticEffect({ foodPriorityBoost: 0.05, shelterPriorityBoost: 0.05 }),
       },
     ],
   },
@@ -199,12 +396,12 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Align responsibilities',
-        effect: () => ({ shelterPriorityBoost: 0.1 }),
+        ...staticEffect({ shelterPriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Let it resolve naturally',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
     ],
   },
@@ -217,12 +414,35 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Talk it through',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
       {
         id: 'B',
         label: 'Refocus on tasks',
-        effect: () => ({ foodPriorityBoost: 0.1 }),
+        ...staticEffect({ foodPriorityBoost: 0.1 }),
+      },
+    ],
+  },
+
+  {
+    id: 'festival_overlap',
+    title: 'Multiple invites collide',
+    body: 'Scheduling gets tricky.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Prioritize essentials',
+        ...staticEffect({ foodPriorityBoost: 0.08, shelterPriorityBoost: 0.08 }),
+      },
+      {
+        id: 'B',
+        label: 'Split teams',
+        ...staticEffect({ carePriorityBoost: 0.08 }),
+      },
+      {
+        id: 'C',
+        label: 'Decline extras',
+        ...staticEffect({ suppliesCareDelta: 0.3 }),
       },
     ],
   },
@@ -239,12 +459,12 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Replenish supplies',
-        effect: () => ({ suppliesFoodDelta: 0.7, suppliesShelterDelta: 0.7, suppliesCareDelta: 0.6 }),
+        ...staticEffect({ suppliesFoodDelta: 0.7, suppliesShelterDelta: 0.7, suppliesCareDelta: 0.6 }),
       },
       {
         id: 'B',
         label: 'Invest in coordination',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
     ],
   },
@@ -257,12 +477,39 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Accept support',
-        effect: () => ({ suppliesFoodDelta: 0.35, suppliesShelterDelta: 0.35, suppliesCareDelta: 0.3 }),
+        ...staticEffect({ suppliesFoodDelta: 0.35, suppliesShelterDelta: 0.35, suppliesCareDelta: 0.3 }),
       },
       {
         id: 'B',
         label: 'Share knowledge instead',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
+      },
+    ],
+  },
+
+  {
+    id: 'mentor_exchange',
+    title: 'A nearby crew invites a skills swap',
+    body: 'Shared learning can pay off.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Send supplies as thanks',
+        ...staticEffect({
+          suppliesFoodDelta: -0.3,
+          suppliesShelterDelta: -0.3,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'food' },
+        }),
+      },
+      {
+        id: 'B',
+        label: 'Host the training',
+        ...staticEffect({ carePriorityBoost: 0.08 }),
+      },
+      {
+        id: 'C',
+        label: 'Trade notes only',
+        ...staticEffect({ foodPriorityBoost: 0.05 }),
       },
     ],
   },
@@ -279,12 +526,12 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Maintain routines',
-        effect: () => ({ suppliesFoodDelta: 0.35, suppliesShelterDelta: 0.35, suppliesCareDelta: 0.3 }),
+        ...staticEffect({ suppliesFoodDelta: 0.35, suppliesShelterDelta: 0.35, suppliesCareDelta: 0.3 }),
       },
       {
         id: 'B',
         label: 'Check in on people',
-        effect: () => ({ carePriorityBoost: 0.1 }),
+        ...staticEffect({ carePriorityBoost: 0.1 }),
       },
     ],
   },
@@ -297,12 +544,38 @@ export const EVENTS: CommonsEvent[] = [
       {
         id: 'A',
         label: 'Keep going',
-        effect: () => ({ suppliesFoodDelta: 0.35, suppliesShelterDelta: 0.35, suppliesCareDelta: 0.3 }),
+        ...staticEffect({ suppliesFoodDelta: 0.35, suppliesShelterDelta: 0.35, suppliesCareDelta: 0.3 }),
       },
       {
         id: 'B',
         label: 'Refine priorities',
-        effect: () => ({ foodPriorityBoost: 0.05, shelterPriorityBoost: 0.05 }),
+        ...staticEffect({ foodPriorityBoost: 0.05, shelterPriorityBoost: 0.05 }),
+      },
+    ],
+  },
+
+  {
+    id: 'water_pipe_break',
+    title: 'A water line bursts',
+    body: 'Shelter spaces need quick attention.',
+    choices: [
+      {
+        id: 'A',
+        label: 'Patch with what you have',
+        ...staticEffect({
+          suppliesShelterDelta: -0.9,
+          wipeRisk: { ...DEFAULT_WIPE_RISK, target: 'shelter' },
+        }),
+      },
+      {
+        id: 'B',
+        label: 'Reroute usage',
+        ...staticEffect({ shelterPriorityBoost: 0.08 }),
+      },
+      {
+        id: 'C',
+        label: 'Check on hydration needs',
+        ...staticEffect({ carePriorityBoost: 0.08 }),
       },
     ],
   },

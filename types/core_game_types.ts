@@ -158,16 +158,18 @@ export type GrowthDecisionChoiceKey =
 
 export type GrowthDecisionSelections = Partial<Record<GrowthDecisionId, GrowthDecisionChoiceKey>>;
 
-export type CommunityValueFlags = {
-  trustFocused: boolean;
-  careFirst: boolean;
-  informalCoordination: boolean;
-  participatoryGovernance: boolean;
-  denseLiving: boolean;
-  identityStrong: boolean;
-  adaptiveGovernance: boolean;
-  aidAnchor: boolean;
-};
+export type CommunityValueFlagKey =
+  | GrowthDecisionChoiceKey
+  | 'trustFocused'
+  | 'careFirst'
+  | 'informalCoordination'
+  | 'participatoryGovernance'
+  | 'denseLiving'
+  | 'identityStrong'
+  | 'adaptiveGovernance'
+  | 'aidAnchor';
+
+export type CommunityValueFlags = Record<CommunityValueFlagKey, boolean>;
 
 export type GrowthModifierProfile = {
   supplyGainMultiplier: number;

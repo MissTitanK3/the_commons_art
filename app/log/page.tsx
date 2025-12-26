@@ -181,7 +181,10 @@ export default function LogPage() {
           <div className="space-y-4">
             {eventLog.map((event: CommonsState['eventLog'][number]) => {
               const meta = eventsById.get(event.id);
-              const choiceLabel = meta?.choices.find((choice) => choice.id === event.choice)?.label;
+              const choiceMeta = meta?.choices.find((choice) => choice.id === event.choice);
+              const choiceLabel = choiceMeta?.label ?? `Option ${event.choice}`;
+              const choiceEffect = choiceMeta?.effectDescription;
+              const wipe = event.wipe;
 
               return (
                 <div
@@ -191,9 +194,14 @@ export default function LogPage() {
                   <h3 className="text-base font-semibold">{meta?.title ?? event.id}</h3>
                   <p className="text-sm text-text opacity-70">{formatTimeAgoNMH(event.at)}</p>
                   <p className="text-sm">
-                    Choice: {event.choice}
-                    {choiceLabel ? ` - ${choiceLabel}` : event.choice === 'A' ? ' - Option A' : ' - Option B'}
+                    Choice: {choiceLabel}
+                    {choiceEffect ? ` — ${choiceEffect}` : ''}
                   </p>
+                  {wipe ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Wipe triggered: -{Math.round(wipe.fraction * 100)}% {wipe.target}
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
