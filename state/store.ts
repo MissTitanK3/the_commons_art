@@ -44,7 +44,7 @@ import { EventChoiceId } from '@/types/global_types';
  * Bump this when making breaking changes to the stored state shape.
  * LEAVE HERE
  */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 type PendingPrestigeDecision = {
   id: GrowthDecisionId;
@@ -181,7 +181,8 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
     lastActiveAt: Date.now(),
   });
 
-  const scaleRequirement = (base: number, prestigeStars: number) => base * (1 + prestigeStars * PRESTIGE_REQUIREMENT_STEP);
+  const scaleRequirement = (base: number, prestigeStars: number) =>
+    base * (1 + prestigeStars * PRESTIGE_REQUIREMENT_STEP);
 
   const buildPrestigeSummaryData = (state: CommonsState): PendingPrestigeSummary => {
     const decisions: PendingPrestigeDecision[] = Object.entries(state.growthDecisionSelections)
