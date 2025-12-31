@@ -33,7 +33,8 @@ export default function SettingsPage() {
   }, [hydrate]);
 
   useEffect(() => {
-    setMounted(true);
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   const handleResetProgress = async () => {
