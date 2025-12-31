@@ -1,20 +1,18 @@
 'use client';
 
 import { CheckCircle, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CATEGORY_COLORS, CATEGORY_ICONS, CATEGORY_LABELS } from '@/config/constants';
 import { UB_COPY } from '@/copy/strings';
 import { CommonsState, useCommonsStore } from '@/state/store';
 import {
   getUbContributionPlan,
-  getUbDayInfo,
   getUbRequirements,
   UB_KEYS,
   type UniversalBasicKey,
 } from '@/systems/universalBasics';
 
 export function UniversalBasicsPanel() {
-  const ubDayStartAt = useCommonsStore((s: CommonsState) => s.ubDayStartAt);
   const ubProgress = useCommonsStore((s: CommonsState) => s.ubProgress);
   const ubActiveCredits = useCommonsStore((s: CommonsState) => s.ubActiveCredits);
   const suppliesFood = useCommonsStore((s: CommonsState) => s.suppliesFood);
@@ -33,7 +31,6 @@ export function UniversalBasicsPanel() {
       ),
   );
 
-  const dayInfo = useMemo(() => getUbDayInfo(ubDayStartAt), [ubDayStartAt]);
   const available = { food: suppliesFood, shelter: suppliesShelter, care: suppliesCare };
 
   return (
@@ -41,7 +38,6 @@ export function UniversalBasicsPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Universal Basics</h2>
-          <p className="text-xs text-text opacity-70">Hour {dayInfo.hour.toFixed(1)} / 24 · applies today</p>
         </div>
         <Sparkles size={18} className="text-tint" aria-hidden />
       </div>
