@@ -22,6 +22,18 @@ import {
   PRESTIGE_REQUIREMENT_STEP,
   SCALE_REQUIREMENTS,
 } from '@/systems/scaleMetrics';
+import {
+  buildUbEffectModifiers,
+  createEmptyUbCredits,
+  createEmptyUbProgress,
+  getUbContributionPlan,
+  getUbDayLengthMs,
+  getUbProgressValue,
+  getUbRequirements,
+  type UniversalBasicKey,
+  type UniversalBasicsCredits,
+  type UniversalBasicsProgress,
+} from '@/systems/universalBasics';
 import { OFFLINE_CAP_MS } from '@/systems/tick';
 import { calculateStatus } from '@/systems/status';
 import { APP_VERSION } from '@/config/version';
@@ -44,7 +56,7 @@ import { EventChoiceId } from '@/types/global_types';
  * Bump this when making breaking changes to the stored state shape.
  * LEAVE HERE
  */
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 type PendingPrestigeDecision = {
   id: GrowthDecisionId;
@@ -92,6 +104,9 @@ export type CommonsState = {
   pendingPrestigeSummary?: PendingPrestigeSummary;
   legacyRuns: LegacyRunRecord[];
   pinnedLegacyRunId?: string;
+  ubDayStartAt: number;
+  ubProgress: UniversalBasicsProgress;
+  ubActiveCredits: UniversalBasicsCredits;
 
   rolling: {
     supplyTrend: number[];
@@ -122,6 +137,8 @@ export type CommonsState = {
   queuePrestigeSummary: () => void;
   cancelPrestigeSummary: () => void;
   prestige: () => Promise<void>;
+  contributeUniversalBasic: (key: UniversalBasicKey) => void;
+  contributeUniversalBasicManual: (key: UniversalBasicKey, spend: { food?: number; shelter?: number; care?: number }) => void;
   resetProgress: () => Promise<void>;
   renameLegacyRun: (id: string, label: string) => void;
   setLegacyNote: (id: string, note: string) => void;
@@ -162,6 +179,9 @@ export const DEFAULT_STATE = {
   communityValues: deriveCommunityValueFlags({}),
   legacyRuns: [],
   pinnedLegacyRunId: undefined,
+  ubDayStartAt: Date.now(),
+  ubProgress: createEmptyUbProgress(),
+  ubActiveCredits: createEmptyUbCredits(),
 
   rolling: {
     supplyTrend: [],
@@ -180,6 +200,29 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
     ...updates,
     lastActiveAt: Date.now(),
   });
+
+  const syncUbDay = (state: CommonsState, now: number) => {
+    let ubDayStartAt = state.ubDayStartAt ?? now;
+    let ubProgress = state.ubProgress ?? createEmptyUbProgress();
+    let ubActiveCredits = state.ubActiveCredits ?? createEmptyUbCredits();
+
+    const dayLengthMs = getUbDayLengthMs();
+    let rolled = false;
+
+    while (now - ubDayStartAt >= dayLengthMs) {
+      rolled = true;
+      ubDayStartAt += dayLengthMs;
+      ubProgress = createEmptyUbProgress();
+      ubActiveCredits = createEmptyUbCredits();
+    }
+
+    return {
+      rolled,
+      ubDayStartAt,
+      ubProgress,
+      ubActiveCredits,
+    };
+  };
 
   const scaleRequirement = (base: number, prestigeStars: number) =>
     base * (1 + prestigeStars * PRESTIGE_REQUIREMENT_STEP);
@@ -242,36 +285,41 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
 
     tick: (elapsedSeconds) => {
       const state = get();
-      const growthProfile = buildGrowthProfile(state.growthDecisionSelections);
+      const now = Date.now();
+      const ubSync = syncUbDay(state, now);
+      const baseState = ubSync.rolled ? { ...state, ...ubSync } : state;
+
+      const growthProfile = buildGrowthProfile(baseState.growthDecisionSelections);
+      const ubEffects = buildUbEffectModifiers(baseState.ubActiveCredits);
 
       const result = applyTick({
         supplies: {
-          food: state.suppliesFood,
-          shelter: state.suppliesShelter,
-          care: state.suppliesCare,
+          food: baseState.suppliesFood,
+          shelter: baseState.suppliesShelter,
+          care: baseState.suppliesCare,
         },
-        priority: state.priority,
-        volunteerTime: state.volunteerTime,
+        priority: baseState.priority,
+        volunteerTime: baseState.volunteerTime,
         elapsedSeconds,
-        communityScale: state.communityScale,
+        communityScale: baseState.communityScale,
         growthProfile,
       });
 
-      const prevTotal = state.suppliesFood + state.suppliesShelter + state.suppliesCare;
+      const prevTotal = baseState.suppliesFood + baseState.suppliesShelter + baseState.suppliesCare;
       const nextTotal = result.supplies.food + result.supplies.shelter + result.supplies.care;
       const delta = nextTotal - prevTotal;
 
-      const supplyTrend = [...state.rolling.supplyTrend, delta].slice(-20);
+      const supplyTrend = [...baseState.rolling.supplyTrend, delta].slice(-20);
 
       const needTrend = {
-        food: [...state.rolling.needTrend.food, -result.drains.food].slice(-20),
-        shelter: [...state.rolling.needTrend.shelter, -result.drains.shelter].slice(-20),
-        care: [...state.rolling.needTrend.care, -result.drains.care].slice(-20),
+        food: [...baseState.rolling.needTrend.food, -result.drains.food].slice(-20),
+        shelter: [...baseState.rolling.needTrend.shelter, -result.drains.shelter].slice(-20),
+        care: [...baseState.rolling.needTrend.care, -result.drains.care].slice(-20),
       };
 
       const status = calculateStatus(
         {
-          ...state,
+          ...baseState,
           suppliesFood: result.supplies.food,
           suppliesShelter: result.supplies.shelter,
           suppliesCare: result.supplies.care,
@@ -280,32 +328,31 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
             needTrend,
           },
         },
-        { resilienceBias: growthProfile.resilienceBias },
+        { resilienceBias: growthProfile.resilienceBias + ubEffects.resilienceBias },
       );
 
       // Check if current scale is sustainable
       const isSustainable = canSustainScale({
-        communityScale: state.communityScale,
+        communityScale: baseState.communityScale,
         supplyTrend,
-        needs: state.needs,
+        needs: baseState.needs,
         supplies: result.supplies,
-        resilienceBias: growthProfile.resilienceBias,
+        resilienceBias: growthProfile.resilienceBias + ubEffects.resilienceBias,
       });
-      const now = Date.now();
-      let nextLastUnsustainableAt = state.lastUnsustainableAt;
-      let nextScale = state.communityScale;
-      let nextInvestment = state.communityInvestment;
+      let nextLastUnsustainableAt = baseState.lastUnsustainableAt;
+      let nextScale = baseState.communityScale;
+      let nextInvestment = baseState.communityInvestment;
 
       if (!isSustainable) {
         // Mark when it became unsustainable (if not already marked)
-        if (!state.lastUnsustainableAt) {
+        if (!baseState.lastUnsustainableAt) {
           nextLastUnsustainableAt = now;
         }
 
         // Check if grace period has expired
-        if (state.lastUnsustainableAt) {
-          const currentTierIndex = getScaleTierIndex(state.communityScale);
-          const elapsedSinceUnsustainable = now - state.lastUnsustainableAt;
+        if (baseState.lastUnsustainableAt) {
+          const currentTierIndex = getScaleTierIndex(baseState.communityScale);
+          const elapsedSinceUnsustainable = now - baseState.lastUnsustainableAt;
           const gracePeriodMs = getGracePeriodMs(0); // Always use same grace period based on downgrade count
 
           if (elapsedSinceUnsustainable > gracePeriodMs && currentTierIndex > 0) {
@@ -331,7 +378,7 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
             nextLastUnsustainableAt = undefined; // Reset timer for next tier
 
             // Reset investment accordingly
-            nextInvestment = Math.max(0, scaleRequirement(SCALE_REQUIREMENTS[nextScale]!, state.prestigeStars));
+            nextInvestment = Math.max(0, scaleRequirement(SCALE_REQUIREMENTS[nextScale]!, baseState.prestigeStars));
           }
         }
       } else {
@@ -340,25 +387,30 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       }
 
       // Generate new needs based on current scale tier (infinite need generation)
-      const needGenerationRate = NEED_GENERATION_RATE[nextScale] * growthProfile.needGenerationMultiplier;
+      const needGenerationRate =
+        NEED_GENERATION_RATE[nextScale] * growthProfile.needGenerationMultiplier * ubEffects.needGenerationMultiplier;
       const generatedNeeds = needGenerationRate * elapsedSeconds;
-      const totalPriority = state.priority.food + state.priority.shelter + state.priority.care;
+      const totalPriority = baseState.priority.food + baseState.priority.shelter + baseState.priority.care;
       const priorityWeight = (value: number) => (totalPriority === 0 ? 0 : value / totalPriority);
 
       const newNeeds = {
-        food: state.needs.food + generatedNeeds * priorityWeight(state.priority.food),
-        shelter: state.needs.shelter + generatedNeeds * priorityWeight(state.priority.shelter),
-        care: state.needs.care + generatedNeeds * priorityWeight(state.priority.care),
+        food: baseState.needs.food + generatedNeeds * priorityWeight(baseState.priority.food),
+        shelter: baseState.needs.shelter + generatedNeeds * priorityWeight(baseState.priority.shelter),
+        care: baseState.needs.care + generatedNeeds * priorityWeight(baseState.priority.care),
       };
 
       const pendingGrowthDecisionId =
-        state.pendingGrowthDecisionId ?? getPendingGrowthDecisionId(nextScale, state.growthDecisionSelections);
+        baseState.pendingGrowthDecisionId ??
+        getPendingGrowthDecisionId(nextScale, baseState.growthDecisionSelections);
 
       set(
         withTouch({
           suppliesFood: result.supplies.food,
           suppliesShelter: result.supplies.shelter,
           suppliesCare: result.supplies.care,
+          ubDayStartAt: ubSync.ubDayStartAt,
+          ubProgress: ubSync.ubProgress,
+          ubActiveCredits: ubSync.ubActiveCredits,
           communityScale: nextScale,
           communityInvestment: nextInvestment,
           lastUnsustainableAt: nextLastUnsustainableAt,
@@ -419,10 +471,15 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
           legacyNote: run.legacyNote ?? run.identitySummary,
         }));
         const pinnedLegacyRunId: string | undefined = parsed.pinnedLegacyRunId;
+        const ubDayStartAt: number = parsed.ubDayStartAt ?? now;
+        const ubProgress: UniversalBasicsProgress = parsed.ubProgress ?? createEmptyUbProgress();
+        const ubActiveCredits: UniversalBasicsCredits = parsed.ubActiveCredits ?? createEmptyUbCredits();
+        const { ubPendingCredits: _omitUbPending, ...restParsed } = parsed as Record<string, unknown>;
+        void _omitUbPending;
 
         set((s) => ({
           ...s,
-          ...parsed,
+          ...restParsed,
           suppliesFood: parsed.suppliesFood ?? (migrated ? evenShare : s.suppliesFood),
           suppliesShelter: parsed.suppliesShelter ?? (migrated ? evenShare : s.suppliesShelter),
           suppliesCare: parsed.suppliesCare ?? (migrated ? evenShare : s.suppliesCare),
@@ -431,6 +488,9 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
           prestigeStars,
           legacyRuns,
           pinnedLegacyRunId,
+          ubDayStartAt,
+          ubProgress,
+          ubActiveCredits,
           currentEventId: parsed.currentEventId,
           lastEventAt: parsed.lastEventAt ?? s.lastEventAt,
           lastUnsustainableAt: parsed.lastUnsustainableAt ?? s.lastUnsustainableAt,
@@ -446,6 +506,14 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
 
         if (elapsedSeconds > 0) {
           get().tick(elapsedSeconds);
+        } else {
+          const ubSync = syncUbDay(get(), now);
+          if (ubSync.rolled) {
+            set((s) => ({
+              ...s,
+              ...ubSync,
+            }));
+          }
         }
 
         set({ lastActiveAt: now });
@@ -483,6 +551,9 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
           communityValues: state.communityValues,
           legacyRuns: state.legacyRuns,
           pinnedLegacyRunId: state.pinnedLegacyRunId,
+          ubDayStartAt: state.ubDayStartAt,
+          ubProgress: state.ubProgress,
+          ubActiveCredits: state.ubActiveCredits,
           appVersion: APP_VERSION,
         }),
       );
@@ -581,6 +652,186 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
           suppliesCare: state.suppliesCare - spend.care,
           needs: newNeeds,
           pendingGrowthDecisionId,
+        }),
+      );
+    },
+
+    contributeUniversalBasic: (ubKey) => {
+      const state = get();
+      const now = Date.now();
+      const ubSync = syncUbDay(state, now);
+      const baseState = ubSync.rolled ? { ...state, ...ubSync } : state;
+
+      const bar = ubSync.ubProgress[ubKey] ?? { contributed: { food: 0, shelter: 0, care: 0 }, completed: false };
+      if (bar.completed) {
+        if (ubSync.rolled) {
+          set(
+            withTouch({
+              ubDayStartAt: ubSync.ubDayStartAt,
+              ubProgress: ubSync.ubProgress,
+              ubActiveCredits: ubSync.ubActiveCredits,
+            }),
+          );
+        }
+        return;
+      }
+
+      const plan = getUbContributionPlan({
+        key: ubKey,
+        contributed: bar.contributed,
+        available: {
+          food: baseState.suppliesFood,
+          shelter: baseState.suppliesShelter,
+          care: baseState.suppliesCare,
+        },
+      });
+
+      const alreadyAtCap = plan.targetProgress <= plan.currentProgress + 0.0001;
+      if (alreadyAtCap) {
+        if (ubSync.rolled) {
+          set(
+            withTouch({
+              ubDayStartAt: ubSync.ubDayStartAt,
+              ubProgress: ubSync.ubProgress,
+              ubActiveCredits: ubSync.ubActiveCredits,
+            }),
+          );
+        }
+        return;
+      }
+
+      const spendFood = Math.min(plan.needed.food, baseState.suppliesFood);
+      const spendShelter = Math.min(plan.needed.shelter, baseState.suppliesShelter);
+      const spendCare = Math.min(plan.needed.care, baseState.suppliesCare);
+
+      const nextContributed = {
+        food: bar.contributed.food + spendFood,
+        shelter: bar.contributed.shelter + spendShelter,
+        care: bar.contributed.care + spendCare,
+      };
+
+      const progressAfter = getUbProgressValue(nextContributed, plan.requirements);
+      const completed = progressAfter >= 0.999;
+
+      const nextUbProgress: UniversalBasicsProgress = {
+        ...ubSync.ubProgress,
+        [ubKey]: {
+          contributed: nextContributed,
+          completed,
+        },
+      };
+
+      set(
+        withTouch({
+          suppliesFood: baseState.suppliesFood - spendFood,
+          suppliesShelter: baseState.suppliesShelter - spendShelter,
+          suppliesCare: baseState.suppliesCare - spendCare,
+          ubDayStartAt: ubSync.ubDayStartAt,
+          ubProgress: nextUbProgress,
+          ubActiveCredits: completed
+            ? { ...ubSync.ubActiveCredits, [ubKey]: true }
+            : ubSync.ubActiveCredits,
+        }),
+      );
+    },
+
+    contributeUniversalBasicManual: (ubKey, spendInput) => {
+      const state = get();
+      const now = Date.now();
+      const ubSync = syncUbDay(state, now);
+      const baseState = ubSync.rolled ? { ...state, ...ubSync } : state;
+
+      const bar = ubSync.ubProgress[ubKey] ?? { contributed: { food: 0, shelter: 0, care: 0 }, completed: false };
+      if (bar.completed) {
+        if (ubSync.rolled) {
+          set(
+            withTouch({
+              ubDayStartAt: ubSync.ubDayStartAt,
+              ubProgress: ubSync.ubProgress,
+              ubActiveCredits: ubSync.ubActiveCredits,
+            }),
+          );
+        }
+        return;
+      }
+
+      const sanitize = (value?: number) => {
+        const n = Math.floor(Number(value ?? 0));
+        if (!Number.isFinite(n) || n < 0) return 0;
+        return n;
+      };
+      const spend = {
+        food: sanitize(spendInput.food),
+        shelter: sanitize(spendInput.shelter),
+        care: sanitize(spendInput.care),
+      };
+
+      const totalSpendAttempt = spend.food + spend.shelter + spend.care;
+      if (totalSpendAttempt <= 0) {
+        if (ubSync.rolled) {
+          set(
+            withTouch({
+              ubDayStartAt: ubSync.ubDayStartAt,
+              ubProgress: ubSync.ubProgress,
+              ubActiveCredits: ubSync.ubActiveCredits,
+            }),
+          );
+        }
+        return;
+      }
+
+      const requirements = getUbRequirements(ubKey);
+      const remainingNeed = {
+        food: Math.max(0, requirements.food - bar.contributed.food),
+        shelter: Math.max(0, requirements.shelter - bar.contributed.shelter),
+        care: Math.max(0, requirements.care - bar.contributed.care),
+      };
+
+      const spendFood = Math.min(spend.food, baseState.suppliesFood, remainingNeed.food);
+      const spendShelter = Math.min(spend.shelter, baseState.suppliesShelter, remainingNeed.shelter);
+      const spendCare = Math.min(spend.care, baseState.suppliesCare, remainingNeed.care);
+
+      const totalApplied = spendFood + spendShelter + spendCare;
+      if (totalApplied <= 0) {
+        if (ubSync.rolled) {
+          set(
+            withTouch({
+              ubDayStartAt: ubSync.ubDayStartAt,
+              ubProgress: ubSync.ubProgress,
+              ubActiveCredits: ubSync.ubActiveCredits,
+            }),
+          );
+        }
+        return;
+      }
+
+      const nextContributed = {
+        food: bar.contributed.food + spendFood,
+        shelter: bar.contributed.shelter + spendShelter,
+        care: bar.contributed.care + spendCare,
+      };
+
+      const progressAfter = getUbProgressValue(nextContributed, requirements);
+      const completed = progressAfter >= 0.999;
+
+      const nextUbProgress: UniversalBasicsProgress = {
+        ...ubSync.ubProgress,
+        [ubKey]: {
+          contributed: nextContributed,
+          completed,
+        },
+      };
+
+      set(
+        withTouch({
+          suppliesFood: baseState.suppliesFood - spendFood,
+          suppliesShelter: baseState.suppliesShelter - spendShelter,
+          suppliesCare: baseState.suppliesCare - spendCare,
+          ubDayStartAt: ubSync.ubDayStartAt,
+          ubProgress: nextUbProgress,
+          ubActiveCredits: completed
+            ? { ...ubSync.ubActiveCredits, [ubKey]: true }
+            : ubSync.ubActiveCredits,
         }),
       );
     },
@@ -725,10 +976,14 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       const effects = choice.effect(state);
       if (!effects) return;
 
+      const ubEffects = buildUbEffectModifiers(state.ubActiveCredits);
       const growthProfile = buildGrowthProfile(state.growthDecisionSelections);
       const scaleEventDelta = (delta: number | undefined) => {
         if (!delta) return 0;
-        const bias = delta >= 0 ? growthProfile.eventPositiveMultiplier : growthProfile.eventNegativeMultiplier;
+        const bias =
+          delta >= 0
+            ? growthProfile.eventPositiveMultiplier
+            : growthProfile.eventNegativeMultiplier * ubEffects.eventNegativeMultiplier;
         return delta * bias;
       };
 
@@ -764,9 +1019,9 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       let appliedWipe: CommonsState['eventLog'][number]['wipe'];
       if (effects.wipeRisk) {
         const { target, chance, minFraction, maxFraction } = effects.wipeRisk;
-        const boundedChance = Math.max(0, Math.min(1, chance));
-        const lower = Math.max(0, Math.min(1, minFraction));
-        const upper = Math.max(lower, Math.min(1, maxFraction));
+        const boundedChance = Math.max(0, Math.min(1, chance * ubEffects.wipeChanceMultiplier));
+        const lower = Math.max(0, Math.min(1, minFraction * ubEffects.wipeMagnitudeMultiplier));
+        const upper = Math.max(lower, Math.min(1, maxFraction * ubEffects.wipeMagnitudeMultiplier));
         if (boundedChance > 0 && Math.random() < boundedChance) {
           const fraction = lower + Math.random() * (upper - lower);
           const apply = (current: number) => Math.max(0, current * (1 - fraction));
@@ -868,6 +1123,9 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
         withTouch({
           ...DEFAULT_STATE,
           prestigeStars: nextStars,
+          ubDayStartAt: Date.now(),
+          ubProgress: createEmptyUbProgress(),
+          ubActiveCredits: createEmptyUbCredits(),
           legacyRuns,
           pinnedLegacyRunId: state.pinnedLegacyRunId,
           lastUnsustainableAt: undefined,
@@ -896,6 +1154,9 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       set(
         withTouch({
           ...DEFAULT_STATE,
+          ubDayStartAt: Date.now(),
+          ubProgress: createEmptyUbProgress(),
+          ubActiveCredits: createEmptyUbCredits(),
           lastUnsustainableAt: undefined,
         }),
       );
@@ -977,6 +1238,9 @@ export const useCommonsStore = create<CommonsState>((set, get) => {
       set(
         withTouch({
           ...DEFAULT_STATE,
+          ubDayStartAt: Date.now(),
+          ubProgress: createEmptyUbProgress(),
+          ubActiveCredits: createEmptyUbCredits(),
           lastUnsustainableAt: undefined,
         }),
       );

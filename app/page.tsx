@@ -8,6 +8,7 @@ import { CommunityScaleSummary } from "@/components/CommunityScaleSummary";
 import { GrowthDecisionModal } from "@/components/GrowthDecisionModal";
 import { PrestigeModal } from "@/components/PrestigeModal";
 import { SuppliesGrid } from "@/components/SuppliesGrid";
+import { UniversalBasicsPanel } from "@/components/UniversalBasicsPanel";
 import { useCommonsStore, type CommonsState } from "@/state/store";
 import { TICK_INTERVAL_MS } from "@/systems/tick";
 
@@ -198,9 +199,11 @@ export default function HomePage() {
           pendingDecisionCount={pendingDecisionCount}
           onEventBellClick={() => setEventModalOpen(true)}
         />
-
         {/* Community Grid */}
         <CommunityGrid />
+
+        <UniversalBasicsPanel />
+
 
         {/* Community Scale Summary */}
         <CommunityScaleSummary onOpenGrowthDecision={() => setGrowthDecisionOpen(true)} />

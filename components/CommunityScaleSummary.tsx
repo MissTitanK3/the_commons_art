@@ -15,7 +15,6 @@ const valueLabelForChoice = (flagKey: keyof CommunityValueFlags | undefined, fal
 
 export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSummaryProps) {
   const communityScale = useCommonsStore((s: CommonsState) => s.communityScale);
-  const status = useCommonsStore((s: CommonsState) => s.status);
   const suppliesFood = useCommonsStore((s: CommonsState) => s.suppliesFood);
   const suppliesShelter = useCommonsStore((s: CommonsState) => s.suppliesShelter);
   const suppliesCare = useCommonsStore((s: CommonsState) => s.suppliesCare);
@@ -30,12 +29,6 @@ export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSu
   const scaleIndex = SCALE_ORDER.indexOf(communityScale);
   const isMaxScale = scaleIndex === SCALE_ORDER.length - 1;
   const requirementMultiplier = 1 + prestigeStars * PRESTIGE_REQUIREMENT_STEP;
-
-  let scaleStatus = 'Holding';
-  if (status === 'well_supported') scaleStatus = 'Well Supported';
-  else if (status === 'improving') scaleStatus = 'Improving';
-  else if (status === 'stable') scaleStatus = 'Stable';
-  else if (status === 'holding') scaleStatus = 'Holding';
 
   const supplies = {
     food: suppliesFood,
@@ -83,7 +76,6 @@ export function CommunityScaleSummary({ onOpenGrowthDecision }: CommunityScaleSu
       {/* Current Scale Display */}
       <div className="text-center mb-4">
         <h2 className="text-lg font-semibold">{SCALE_LABELS[communityScale]}</h2>
-        <p className="text-sm text-text opacity-80">{scaleStatus}</p>
         <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-xs font-semibold">
           <span>Community Stars</span>
           <span className="text-amber-600 dark:text-amber-300">{prestigeStars}</span>
