@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 
 import { PresetButton } from "@/components/settings/PresetButton";
@@ -17,13 +17,24 @@ export default function SettingsPage() {
   const devReset = useCommonsStore((s: CommonsState) => s.devReset);
   const prestigeStars = useCommonsStore((s: CommonsState) => s.prestigeStars);
   const resetProgress = useCommonsStore((s: CommonsState) => s.resetProgress);
+  const hydrate = useCommonsStore((s: CommonsState) => s.hydrate);
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const isDev = process.env.NODE_ENV === "development";
 
-  const hasTheme = typeof theme === "string" && theme.length > 0;
+  const hasTheme = mounted && typeof theme === "string" && theme.length > 0;
   const currentTheme = hasTheme ? theme : undefined;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    hydrate().catch(() => { });
+  }, [hydrate]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleResetProgress = async () => {
     if (prestigeStars <= 0) return;
